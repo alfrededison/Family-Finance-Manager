@@ -1,4 +1,4 @@
-import { json, error } from '../_utils.js';
+import { json, error, computeAssetMetrics } from '../_utils.js';
 
 // GET /api/dashboard — single round-trip: KPIs + breakdowns + recent activity
 export async function onRequestGet({ env }) {
@@ -86,9 +86,5 @@ export async function onRequestGet({ env }) {
 }
 
 function decorate(a) {
-  const value = (a.qty || 0) * (a.current_price || 0);
-  const cost = (a.qty || 0) * (a.cost_price || 0);
-  const pnl = value - cost;
-  const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
-  return { ...a, value, cost, pnl, pnlPct };
+  return { ...a, ...computeAssetMetrics(a) };
 }

@@ -1,4 +1,4 @@
-import { json, error, readBody, nowISO } from '../_utils.js';
+import { json, error, readBody, nowISO, computeAssetMetrics } from '../_utils.js';
 
 // GET /api/assets?group=&member=&subtype=&q=
 export async function onRequestGet({ env, request }) {
@@ -29,13 +29,7 @@ export async function onRequestGet({ env, request }) {
     const bound = params.length ? stmt.bind(...params) : stmt;
     const res = await bound.all();
 
-    const rows = (res.results || []).map((a) => {
-      const value = (a.qty || 0) * (a.current_price || 0);
-      const cost  = (a.qty || 0) * (a.cost_price || 0);
-      const pnl   = value - cost;
-      const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
-      return { ...a, value, cost, pnl, pnlPct };
-    });
+    const rows = (res.results || []).map((a) => ({ ...a, ...computeAssetMetrics(a) }));
 
     return json(rows);
   } catch (err) {

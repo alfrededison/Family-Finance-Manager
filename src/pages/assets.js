@@ -120,6 +120,7 @@ function subInfoLine(a) {
   const bits = [];
   if (a.group_id === 'bank' && a.bank) bits.push(formatBank(a.bank));
   if (a.group_id === 'tien-gui' && a.platform) bits.push(a.platform);
+  if (a.term) bits.push(`Kỳ hạn: ${a.term} tháng`);
   if (a.maturity_date) bits.push('Đáo hạn: ' + a.maturity_date);
   if (a.interest_rate != null && a.interest_rate !== '') bits.push(a.interest_rate + '%');
   if (a.notes) bits.push(a.notes);
@@ -379,10 +380,13 @@ function formTienGui(subtypes, platforms, members, asset) {
       <input name="interest_tax_rate" type="number" step="any" value="${a.interest_tax_rate ?? 5}" />
     </label>
     <label>Ngày gửi
-      <input name="start_date" type="date" value="${escapeHtml(a.start_date || '')}" />
+      <input name="start_date" type="date" data-term-trio="start" value="${escapeHtml(a.start_date || '')}" />
     </label>
     <label>Ngày đáo hạn
-      <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
+      <input name="maturity_date" type="date" data-term-trio="mat" value="${escapeHtml(a.maturity_date || '')}" />
+    </label>
+    <label>Kỳ hạn (tháng)
+      <input name="term" type="number" min="1" step="1" data-term-trio="term" value="${escapeHtml(a.term || '')}" />
     </label>
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />
@@ -409,14 +413,17 @@ function formBank(subtypes, members, asset) {
     <label class="full">Số dư hiện tại
       <input name="current_price" type="text" inputmode="numeric" data-money value="${a.current_price ?? 0}" />
     </label>
-    <label data-bank-savings>Lãi suất (%/năm)
+    <label>Lãi suất (%/năm)
       <input name="interest_rate" type="number" step="any" value="${a.interest_rate ?? ''}" />
     </label>
-    <label data-bank-savings>Ngày gửi
-      <input name="start_date" type="date" value="${escapeHtml(a.start_date || '')}" />
+    <label>Ngày gửi
+      <input name="start_date" type="date" data-term-trio="start" value="${escapeHtml(a.start_date || '')}" />
     </label>
-    <label data-bank-savings class="full">Ngày đáo hạn
-      <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
+    <label data-bank-savings>Ngày đáo hạn
+      <input name="maturity_date" type="date" data-term-trio="mat" value="${escapeHtml(a.maturity_date || '')}" />
+    </label>
+    <label data-bank-savings>Kỳ hạn (tháng)
+      <input name="term" type="number" min="1" step="1" data-term-trio="term" value="${escapeHtml(a.term || '')}" />
     </label>
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="cost_price" value="${a.cost_price ?? 0}" />
@@ -452,12 +459,19 @@ function formGeneric(subtypes, members, asset) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Form behaviour (Bank: show savings fields only for term-savings subtypes)
+// Form behaviour (Bank: show savings fields only for term-savings subtypes;
+// tiền gửi + bank savings: bidirectional start/maturity/term auto-fill)
 // ────────────────────────────────────────────────────────────────────────────
 function bindFormBehaviour(groupId, formBody) {
+  if (groupId === 'tien-gui') {
+    bindTermTrio(formBody);
+    return;
+  }
   if (groupId !== 'bank') return;
+
   const subtypeEl = formBody.querySelector('select[name="subtype"]');
   const savingsEls = formBody.querySelectorAll('[data-bank-savings]');
+  bindTermTrio(formBody);
   if (!subtypeEl || !savingsEls.length) return;
 
   const toggle = () => {
@@ -466,6 +480,53 @@ function bindFormBehaviour(groupId, formBody) {
   };
   subtypeEl.addEventListener('change', toggle);
   toggle();
+}
+
+// ─── Term/date trio: any 2 of {start_date, maturity_date, term} → 3rd ──────
+// When user edits one field, prefer to keep `term` sticky (it represents an
+// intentional choice), so editing a date recomputes the *other* date when
+// term is set.
+function addMonths(dateStr, months) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+function monthsBetween(startStr, endStr) {
+  const s = new Date(startStr);
+  const e = new Date(endStr);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return '';
+  let m = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+  if (e.getDate() < s.getDate()) m -= 1;
+  return m > 0 ? String(m) : '';
+}
+function bindTermTrio(formBody) {
+  const startEl = formBody.querySelector('[data-term-trio="start"]');
+  const matEl   = formBody.querySelector('[data-term-trio="mat"]');
+  const termEl  = formBody.querySelector('[data-term-trio="term"]');
+  if (!startEl || !matEl || !termEl) return;
+
+  const recompute = (changed) => {
+    const start = startEl.value;
+    const mat = matEl.value;
+    const termRaw = termEl.value.trim();
+    const term = termRaw ? parseInt(termRaw, 10) : null;
+
+    if (changed === 'start' && start) {
+      if (term) matEl.value = addMonths(start, term);
+      else if (mat) termEl.value = monthsBetween(start, mat);
+    } else if (changed === 'mat' && mat) {
+      if (term) startEl.value = addMonths(mat, -term);
+      else if (start) termEl.value = monthsBetween(start, mat);
+    } else if (changed === 'term' && term) {
+      if (start) matEl.value = addMonths(start, term);
+      else if (mat) startEl.value = addMonths(mat, -term);
+    }
+  };
+
+  startEl.addEventListener('change', () => recompute('start'));
+  matEl.addEventListener('change', () => recompute('mat'));
+  termEl.addEventListener('input', () => recompute('term'));
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -487,9 +548,8 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
       body.current_price = body.cost_price;
     }
     if (groupId === 'bank' && !BANK_SAVINGS_SUBTYPES.includes(body.subtype)) {
-      body.interest_rate = null;
-      body.start_date = null;
       body.maturity_date = null;
+      body.term = null;
     }
 
     try {
