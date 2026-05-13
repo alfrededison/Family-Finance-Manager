@@ -59,7 +59,7 @@ export async function renderAssets(view) {
 function renderTable(assets, members) {
   if (!assets.length) return '<div class="empty">Chưa có tài sản nào</div>';
   return `
-    <table>
+    <div class="table-wrap"><table>
       <thead>
         <tr>
           <th>Tên</th>
@@ -93,7 +93,7 @@ function renderTable(assets, members) {
           </tr>
         `).join('')}
       </tbody>
-    </table>
+    </table></div>
   `;
 }
 

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "wrangler pages dev dist --port=8788",
     "build": "vite build",
+    "icons": "bash scripts/generate-icons.sh",
     "deploy": "npm run build && wrangler pages deploy dist",
     "db:create": "wrangler d1 create finance-db",
     "db:migrate": "wrangler d1 execute finance-db --remote --file=schema.sql",

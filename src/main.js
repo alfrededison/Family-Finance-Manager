@@ -16,7 +16,7 @@ const routes = {
 const view = document.getElementById('view');
 
 function currentRoute() {
-  const hash = window.location.hash.replace(/^#\//, '');
+  const hash = window.location.hash.replace(/^#\//, '').split('?')[0];
   return routes[hash] ? hash : 'dashboard';
 }
 
@@ -25,6 +25,7 @@ async function router() {
   document.querySelectorAll('.sidebar a').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
   });
+  closeNav();
   view.innerHTML = '<div class="loading">Đang tải...</div>';
   try {
     await routes[route](view);
@@ -34,6 +35,36 @@ async function router() {
 }
 
 window.addEventListener('hashchange', router);
+
+// Mobile nav toggle
+const sidebar = document.getElementById('sidebar');
+const navToggle = document.getElementById('nav-toggle');
+const navBackdrop = document.getElementById('nav-backdrop');
+function openNav() {
+  sidebar.classList.add('open');
+  navBackdrop.hidden = false;
+  requestAnimationFrame(() => navBackdrop.classList.add('show'));
+  navToggle.setAttribute('aria-expanded', 'true');
+  document.body.classList.add('nav-open');
+}
+function closeNav() {
+  sidebar.classList.remove('open');
+  navBackdrop.classList.remove('show');
+  setTimeout(() => { navBackdrop.hidden = true; }, 200);
+  navToggle.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('nav-open');
+}
+navToggle.addEventListener('click', () => {
+  if (sidebar.classList.contains('open')) closeNav(); else openNav();
+});
+navBackdrop.addEventListener('click', closeNav);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 
 // Init: seed if empty, then render
 (async function init() {

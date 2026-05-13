@@ -37,6 +37,13 @@ export async function renderTransactions(view) {
 
   document.getElementById('btn-new').onclick = () => openTxModal(assets, members);
 
+  // PWA shortcut: /#/transactions?new=1 opens the new-transaction modal
+  const query = window.location.hash.split('?')[1] || '';
+  if (new URLSearchParams(query).get('new') === '1') {
+    history.replaceState(null, '', '#/transactions');
+    openTxModal(assets, members);
+  }
+
   let filterTimer;
   const reload = async () => {
     const q = document.getElementById('f-q').value;
@@ -57,7 +64,7 @@ export async function renderTransactions(view) {
 function renderTable(txs) {
   if (!txs.length) return '<div class="empty">Chưa có giao dịch nào</div>';
   return `
-    <table>
+    <div class="table-wrap"><table>
       <thead>
         <tr>
           <th>Ngày</th>
@@ -84,7 +91,7 @@ function renderTable(txs) {
           </tr>
         `).join('')}
       </tbody>
-    </table>
+    </table></div>
   `;
 }
 

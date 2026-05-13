@@ -12,7 +12,7 @@ export async function renderGroups(view) {
 
     <div class="section">
       ${groups.length === 0 ? '<div class="empty">Chưa có nhóm</div>' : `
-      <table>
+      <div class="table-wrap"><table>
         <thead>
           <tr><th>ID</th><th>Icon</th><th>Tên</th><th>Loại</th></tr>
         </thead>
@@ -26,7 +26,7 @@ export async function renderGroups(view) {
             </tr>
           `).join('')}
         </tbody>
-      </table>`}
+      </table></div>`}
     </div>
   `;
 

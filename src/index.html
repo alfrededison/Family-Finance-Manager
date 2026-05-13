@@ -2,13 +2,29 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Theo dõi tài sản và giao dịch cá nhân" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tài chính" />
+  <meta name="format-detection" content="telephone=no" />
   <title>Quản lý Tài chính</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div id="app">
-    <aside class="sidebar">
+    <button id="nav-toggle" class="nav-toggle" aria-label="Mở menu" aria-expanded="false" aria-controls="sidebar">
+      <span></span><span></span><span></span>
+    </button>
+    <div id="nav-backdrop" class="nav-backdrop" hidden></div>
+    <aside id="sidebar" class="sidebar">
       <div class="brand">💰 Tài chính</div>
       <nav>
         <a href="#/dashboard" data-route="dashboard">📊 Tổng quan</a>

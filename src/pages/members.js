@@ -12,7 +12,7 @@ export async function renderMembers(view) {
 
     <div class="section">
       ${members.length === 0 ? '<div class="empty">Chưa có thành viên</div>' : `
-      <table>
+      <div class="table-wrap"><table>
         <thead>
           <tr><th>ID</th><th>Tên</th><th>Màu</th></tr>
         </thead>
@@ -25,7 +25,7 @@ export async function renderMembers(view) {
             </tr>
           `).join('')}
         </tbody>
-      </table>`}
+      </table></div>`}
     </div>
   `;
 

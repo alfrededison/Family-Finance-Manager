@@ -63,7 +63,7 @@ export async function renderDashboard(view) {
     <div class="section">
       <h2>Giao dịch gần đây</h2>
       ${transactions.length === 0 ? '<div class="empty">Chưa có giao dịch</div>' : `
-      <table>
+      <div class="table-wrap"><table>
         <thead>
           <tr><th>Ngày</th><th>Loại</th><th>Tài sản</th><th>Thành viên</th><th class="num">SL</th><th class="num">Đơn giá</th><th class="num">Tổng</th></tr>
         </thead>
@@ -80,7 +80,7 @@ export async function renderDashboard(view) {
             </tr>
           `).join('')}
         </tbody>
-      </table>`}
+      </table></div>`}
     </div>
   `;
 }
