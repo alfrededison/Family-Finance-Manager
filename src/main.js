@@ -3,6 +3,7 @@ import { renderAssets } from './pages/assets.js';
 import { renderTransactions } from './pages/transactions.js';
 import { renderMembers } from './pages/members.js';
 import { renderGroups } from './pages/groups.js';
+import { renderSettings } from './pages/settings.js';
 import { api } from './api.js';
 
 const routes = {
@@ -11,6 +12,7 @@ const routes = {
   transactions: renderTransactions,
   members: renderMembers,
   groups: renderGroups,
+  settings: renderSettings,
 };
 
 const view = document.getElementById('view');
@@ -113,8 +115,6 @@ export function fmtPct(n) {
 export function openModal(html, onMount) {
   const root = document.getElementById('modal-root');
   root.innerHTML = `<div class="modal-overlay"><div class="modal">${html}</div></div>`;
-  const overlay = root.querySelector('.modal-overlay');
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
   if (onMount) onMount(root.querySelector('.modal'));
 }
 
@@ -124,4 +124,58 @@ export function closeModal() {
 
 export function rerender() {
   router();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Money input helpers — used by inputs marked [data-money].
+// Display uses Vietnamese thousand-separator '.'; storage is plain integer.
+// ────────────────────────────────────────────────────────────────────────────
+
+export function formatMoney(value) {
+  const digits = String(value ?? '').replace(/[^\d]/g, '');
+  if (!digits) return '';
+  const stripped = digits.replace(/^0+(\d)/, '$1');
+  return stripped.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+export function parseMoney(formatted) {
+  if (formatted == null || formatted === '') return null;
+  const n = Number(String(formatted).replace(/\./g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Attaches live-format + caret-preserving handlers to all [data-money] inputs
+// within `root`. Safe to call multiple times — the marker class prevents
+// double-binding when forms get re-rendered.
+export function bindMoneyInputs(root) {
+  root.querySelectorAll('input[data-money]').forEach((input) => {
+    if (input.dataset.moneyBound === '1') return;
+    input.dataset.moneyBound = '1';
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    if (input.value) input.value = formatMoney(input.value);
+
+    input.addEventListener('input', () => {
+      const before = input.selectionStart ?? input.value.length;
+      const digitsBefore = input.value.slice(0, before).replace(/\./g, '').length;
+      input.value = formatMoney(input.value);
+      // Restore caret by counting digits.
+      let pos = 0, seen = 0;
+      while (pos < input.value.length && seen < digitsBefore) {
+        if (input.value[pos] !== '.') seen += 1;
+        pos += 1;
+      }
+      input.setSelectionRange(pos, pos);
+    });
+  });
+}
+
+// Convenience: parse `[data-money]` fields of a payload in-place.
+export function parseMoneyPayload(payload, keys) {
+  for (const k of keys) {
+    if (payload[k] != null && payload[k] !== '') {
+      payload[k] = parseMoney(payload[k]);
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { fmtVND, fmtPct, escapeHtml } from '../main.js';
+import { txTypeLabel } from './transactions.js';
 
 export async function renderDashboard(view) {
   const data = await api.get('/dashboard');
@@ -71,7 +72,7 @@ export async function renderDashboard(view) {
           ${transactions.map((t) => `
             <tr>
               <td>${escapeHtml(t.date)}</td>
-              <td><span class="badge">${escapeHtml(typeLabel(t.type))}</span></td>
+              <td><span class="badge">${escapeHtml(txTypeLabel(t.type))}</span></td>
               <td>${escapeHtml(t.asset_name)}</td>
               <td>${escapeHtml(t.member_name || '—')}</td>
               <td class="num">${t.qty}</td>
@@ -85,12 +86,3 @@ export async function renderDashboard(view) {
   `;
 }
 
-function typeLabel(t) {
-  return ({
-    buy: 'Mua',
-    sell: 'Bán',
-    dividend: 'Cổ tức',
-    adjust: 'Điều chỉnh',
-    transfer: 'Chuyển',
-  })[t] || t;
-}

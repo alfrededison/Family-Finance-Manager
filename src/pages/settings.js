@@ -1,0 +1,147 @@
+import { api } from '../api.js';
+import { escapeHtml, toast, rerender } from '../main.js';
+
+export async function renderSettings(view) {
+  view.innerHTML = `
+    <div class="page-header"><h1>⚙️ Cài đặt</h1></div>
+    <div class="section">
+      <h2>Nền tảng tiền gửi</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">Danh sách dùng cho form Tiền gửi. Có thể thêm hoặc xoá tuỳ ý.</p>
+      <div id="platform-list" class="chip-list"></div>
+      <form id="platform-form" class="toolbar" style="margin-top:12px;">
+        <input id="platform-name" placeholder="Tên nền tảng (VD: Topi)" required style="flex:1; min-width:200px;" />
+        <button type="submit">+ Thêm nền tảng</button>
+      </form>
+    </div>
+
+    <div class="section">
+      <h2>Sao lưu &amp; phục hồi (JSON)</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">
+        Xuất toàn bộ dữ liệu ra file JSON để sao lưu, hoặc nhập lại từ file đã xuất.
+      </p>
+
+      <div class="toolbar">
+        <button type="button" id="export-btn">⬇️ Xuất JSON</button>
+      </div>
+
+      <form id="import-form" class="toolbar" style="align-items:center;">
+        <input type="file" id="import-file" accept="application/json,.json" required />
+        <select id="import-mode">
+          <option value="replace">Replace — xoá hết rồi nạp lại</option>
+          <option value="merge">Merge — thêm vào dữ liệu hiện có</option>
+        </select>
+        <button type="submit" class="secondary">⬆️ Nhập JSON</button>
+      </form>
+      <p class="muted-sm">
+        Chế độ <b>Replace</b> giữ nguyên ID gốc — phù hợp khi khôi phục backup.
+        Chế độ <b>Merge</b> gán ID mới và nối tiếp dữ liệu cũ.
+      </p>
+    </div>
+  `;
+
+  await reloadPlatforms();
+
+  document.getElementById('platform-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('platform-name');
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      await api.post('/platforms', { name });
+      input.value = '';
+      toast('Đã thêm');
+      await reloadPlatforms();
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    }
+  };
+
+  document.getElementById('export-btn').onclick = onExport;
+  document.getElementById('import-form').onsubmit = onImport;
+}
+
+async function reloadPlatforms() {
+  const platforms = await api.get('/platforms');
+  const list = document.getElementById('platform-list');
+  if (!platforms.length) {
+    list.innerHTML = '<div class="empty">Chưa có nền tảng</div>';
+    return;
+  }
+  list.innerHTML = platforms.map((p) => `
+    <span class="chip" data-id="${p.id}">
+      ${escapeHtml(p.name)}
+      <button type="button" class="chip-x" aria-label="Xoá ${escapeHtml(p.name)}">✕</button>
+    </span>
+  `).join('');
+  list.querySelectorAll('.chip').forEach((el) => {
+    const id = Number(el.dataset.id);
+    el.querySelector('.chip-x').onclick = async () => {
+      if (!confirm('Xoá nền tảng này?')) return;
+      try {
+        await api.del('/platforms?id=' + id);
+        await reloadPlatforms();
+      } catch (err) {
+        toast('Lỗi: ' + err.message);
+      }
+    };
+  });
+}
+
+async function onExport() {
+  try {
+    const dump = await api.get('/export');
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const today = new Date().toISOString().slice(0, 10);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finance-export-${today}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Đã xuất file');
+  } catch (err) {
+    toast('Lỗi: ' + err.message);
+  }
+}
+
+async function onImport(e) {
+  e.preventDefault();
+  const fileInput = document.getElementById('import-file');
+  const mode = document.getElementById('import-mode').value;
+  const file = fileInput.files?.[0];
+  if (!file) {
+    toast('Hãy chọn file JSON');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch (err) {
+    toast('File JSON không hợp lệ');
+    return;
+  }
+  if (!payload || !payload.data) {
+    toast('File thiếu trường "data"');
+    return;
+  }
+
+  const msg = mode === 'replace'
+    ? 'Chế độ REPLACE sẽ XOÁ toàn bộ dữ liệu hiện tại rồi nạp lại từ file. Tiếp tục?'
+    : 'Nhập (merge) dữ liệu từ file vào dữ liệu hiện tại?';
+  if (!confirm(msg)) return;
+
+  try {
+    const res = await api.post('/import', { mode, data: payload.data });
+    const lines = Object.entries(res.stats || {})
+      .map(([t, n]) => `${t}: ${n}`)
+      .join(', ');
+    toast(`Đã nhập (${mode}) — ${lines}`);
+    fileInput.value = '';
+    rerender();
+  } catch (err) {
+    toast('Lỗi: ' + err.message);
+  }
+}

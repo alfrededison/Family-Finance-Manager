@@ -1,18 +1,20 @@
 import { json, error, readBody, nowISO } from '../_utils.js';
 
-// GET /api/assets?group=&member=&q=
+// GET /api/assets?group=&member=&subtype=&q=
 export async function onRequestGet({ env, request }) {
   try {
     const url = new URL(request.url);
     const group = url.searchParams.get('group');
     const member = url.searchParams.get('member');
+    const subtype = url.searchParams.get('subtype');
     const q = url.searchParams.get('q');
 
     const where = ["a.status = 'active'"];
     const params = [];
-    if (group) { where.push('a.group_id = ?'); params.push(Number(group)); }
-    if (member) { where.push('a.member_id = ?'); params.push(Number(member)); }
-    if (q) { where.push('(a.name LIKE ? OR a.notes LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
+    if (group)   { where.push('a.group_id = ?'); params.push(String(group)); }
+    if (member)  { where.push('a.member_id = ?'); params.push(Number(member)); }
+    if (subtype) { where.push('a.subtype = ?'); params.push(String(subtype)); }
+    if (q)       { where.push('(a.name LIKE ? OR a.notes LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
 
     const sql = `
       SELECT a.*, g.name AS group_name, g.icon AS group_icon, g.type AS group_type,
@@ -29,8 +31,8 @@ export async function onRequestGet({ env, request }) {
 
     const rows = (res.results || []).map((a) => {
       const value = (a.qty || 0) * (a.current_price || 0);
-      const cost = (a.qty || 0) * (a.cost_price || 0);
-      const pnl = value - cost;
+      const cost  = (a.qty || 0) * (a.cost_price || 0);
+      const pnl   = value - cost;
       const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
       return { ...a, value, cost, pnl, pnlPct };
     });
@@ -49,20 +51,30 @@ export async function onRequestPost({ env, request }) {
 
     const now = nowISO();
     const result = await env.DB.prepare(`
-      INSERT INTO assets (name, group_id, subtype, member_id, qty, unit, cost_price, current_price, start_date, end_date, rate, notes, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      INSERT INTO assets (
+        name, group_id, subtype, member_id, qty, unit,
+        cost_price, current_price,
+        platform, term, maturity_date, bank,
+        interest_rate, interest_tax_rate, start_date, end_date, notes,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `).bind(
       b.name,
-      Number(b.group_id),
+      String(b.group_id),
       b.subtype || null,
       b.member_id ? Number(b.member_id) : null,
       Number(b.qty || 0),
       b.unit || null,
       Number(b.cost_price || 0),
       Number(b.current_price || b.cost_price || 0),
+      b.platform || null,
+      b.term || null,
+      b.maturity_date || null,
+      b.bank || null,
+      b.interest_rate != null && b.interest_rate !== '' ? Number(b.interest_rate) : null,
+      b.interest_tax_rate != null && b.interest_tax_rate !== '' ? Number(b.interest_tax_rate) : null,
       b.start_date || null,
       b.end_date || null,
-      b.rate != null ? Number(b.rate) : null,
       b.notes || null,
       now,
       now,

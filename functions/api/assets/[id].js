@@ -1,5 +1,12 @@
 import { json, error, readBody, nowISO } from '../../_utils.js';
 
+const UPDATABLE_FIELDS = [
+  'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
+  'cost_price', 'current_price',
+  'platform', 'term', 'maturity_date', 'bank',
+  'interest_rate', 'interest_tax_rate', 'start_date', 'end_date', 'notes', 'status',
+];
+
 // PUT /api/assets/:id — partial update
 export async function onRequestPut({ env, request, params }) {
   try {
@@ -8,16 +15,12 @@ export async function onRequestPut({ env, request, params }) {
 
     const b = await readBody(request);
 
-    const fields = [
-      'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
-      'cost_price', 'current_price', 'start_date', 'end_date', 'rate', 'notes', 'status',
-    ];
     const sets = [];
     const vals = [];
-    for (const f of fields) {
+    for (const f of UPDATABLE_FIELDS) {
       if (b[f] !== undefined) {
         sets.push(`${f} = ?`);
-        vals.push(b[f]);
+        vals.push(b[f] === '' ? null : b[f]);
       }
     }
     if (!sets.length) return error('no fields to update', 400);
@@ -28,8 +31,8 @@ export async function onRequestPut({ env, request, params }) {
 
     await env.DB.prepare(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
 
-    // Track price history if current_price changed
-    if (b.current_price !== undefined) {
+    // Track price history when current_price changes
+    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
       await env.DB.prepare(
         'INSERT INTO price_history (asset_id, price, recorded_at, source) VALUES (?, ?, ?, ?)'
       ).bind(id, Number(b.current_price), nowISO(), b._source || 'manual').run();

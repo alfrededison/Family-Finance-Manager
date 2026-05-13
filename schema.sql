@@ -1,42 +1,67 @@
--- Finance Manager — D1 Schema
--- Vietnamese finance tracking app
+-- Finance Manager — D1 Schema (Vietnamese finance tracking)
 
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS price_history;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS assets;
+DROP TABLE IF EXISTS asset_subtypes;
 DROP TABLE IF EXISTS asset_groups;
+DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
 
 CREATE TABLE members (
-  id        INTEGER PRIMARY KEY AUTOINCREMENT,
-  name      TEXT    NOT NULL,
-  color     TEXT    NOT NULL DEFAULT '#3b82f6',
-  created_at TEXT   NOT NULL DEFAULT (datetime('now'))
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,
+  color      TEXT    NOT NULL DEFAULT '#3b82f6',
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Asset groups use slug-style string IDs so the frontend can branch on them
 CREATE TABLE asset_groups (
-  id     INTEGER PRIMARY KEY AUTOINCREMENT,
-  name   TEXT    NOT NULL,
-  icon   TEXT    NOT NULL DEFAULT '📦',
-  type   TEXT    NOT NULL CHECK (type IN ('Asset', 'Liability')),
-  active INTEGER NOT NULL DEFAULT 1
+  id         TEXT    PRIMARY KEY,            -- 'dau-tu', 'tich-tru', 'cho-vay', 'di-vay', 'tien-gui', 'bank'
+  name       TEXT    NOT NULL,
+  icon       TEXT    NOT NULL DEFAULT '📦',
+  type       TEXT    NOT NULL CHECK (type IN ('Asset', 'Liability')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active     INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE asset_subtypes (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  group_id TEXT    NOT NULL REFERENCES asset_groups(id),
+  name     TEXT    NOT NULL,
+  UNIQUE (group_id, name)
+);
+
+CREATE INDEX idx_subtypes_group ON asset_subtypes(group_id);
+
+CREATE TABLE platforms (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT    NOT NULL UNIQUE
 );
 
 CREATE TABLE assets (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   name           TEXT    NOT NULL,
-  group_id       INTEGER NOT NULL REFERENCES asset_groups(id),
+  group_id       TEXT    NOT NULL REFERENCES asset_groups(id),
   subtype        TEXT,
   member_id      INTEGER REFERENCES members(id),
   qty            REAL    NOT NULL DEFAULT 0,
   unit           TEXT,
   cost_price     REAL    NOT NULL DEFAULT 0,
   current_price  REAL    NOT NULL DEFAULT 0,
+  -- Tiền gửi (savings deposit) fields
+  platform       TEXT,
+  term           TEXT,
+  maturity_date  TEXT,
+  -- Bank-group field (stored as abbreviation, e.g. 'TCB')
+  bank           TEXT,
+  -- Common
+  interest_rate     REAL,
+  interest_tax_rate REAL,            -- % tax withheld on interest (Tiền gửi: usually 5)
   start_date     TEXT,
   end_date       TEXT,
-  rate           REAL,
   notes          TEXT,
   status         TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'deleted')),
   created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -50,11 +75,17 @@ CREATE INDEX idx_assets_status  ON assets(status);
 CREATE TABLE transactions (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   date       TEXT    NOT NULL,
-  type       TEXT    NOT NULL CHECK (type IN ('buy', 'sell', 'dividend', 'adjust', 'transfer')),
+  -- Type is a free-form slug (per-group flows). See src/pages/transactions.js
+  -- for the canonical list: buy, sell, collect_principal, lend_more,
+  -- collect_interest, settle_out, pay_interest, pay_principal, borrow_more,
+  -- settle_in, adjust, transfer.
+  type       TEXT    NOT NULL,
   asset_id   INTEGER NOT NULL REFERENCES assets(id),
   member_id  INTEGER REFERENCES members(id),
   qty        REAL    NOT NULL DEFAULT 0,
   unit_price REAL    NOT NULL DEFAULT 0,
+  fee        REAL    NOT NULL DEFAULT 0,
+  tax        REAL    NOT NULL DEFAULT 0,
   total      REAL    NOT NULL DEFAULT 0,
   notes      TEXT,
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))

@@ -43,9 +43,9 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "name": "Tài sản",
-      "short_name": "Tài sản",
-      "url": "/#/assets",
+      "name": "Thêm tài sản",
+      "short_name": "Thêm tài sản",
+      "url": "/#/assets?new=1",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]

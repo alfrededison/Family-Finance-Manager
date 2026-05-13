@@ -12,38 +12,80 @@ export async function renderGroups(view) {
 
     <div class="section">
       ${groups.length === 0 ? '<div class="empty">Chưa có nhóm</div>' : `
-      <div class="table-wrap"><table>
-        <thead>
-          <tr><th>ID</th><th>Icon</th><th>Tên</th><th>Loại</th></tr>
-        </thead>
-        <tbody>
-          ${groups.map((g) => `
-            <tr>
-              <td>${g.id}</td>
-              <td style="font-size:20px;">${escapeHtml(g.icon)}</td>
-              <td><strong>${escapeHtml(g.name)}</strong></td>
-              <td><span class="badge">${g.type === 'Liability' ? 'Nợ' : 'Tài sản'}</span></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table></div>`}
+      <div class="group-cards">
+        ${groups.map((g) => `
+          <div class="group-card" data-id="${escapeHtml(g.id)}">
+            <div class="group-card-head">
+              <div>
+                <span style="font-size:20px;">${escapeHtml(g.icon)}</span>
+                <strong>${escapeHtml(g.name)}</strong>
+                <span class="badge">${g.type === 'Liability' ? 'Nợ' : 'Tài sản'}</span>
+              </div>
+              <code class="muted-sm">${escapeHtml(g.id)}</code>
+            </div>
+            <div class="chip-list" data-subtypes>
+              ${(g.subtypes || []).map((s) => `
+                <span class="chip" data-sub-id="${s.id}">
+                  ${escapeHtml(s.name)}
+                  <button type="button" class="chip-x" aria-label="Xoá">✕</button>
+                </span>
+              `).join('')}
+            </div>
+            <form class="toolbar add-subtype" style="margin-top:8px;">
+              <input placeholder="+ Thêm phân loại" required style="flex:1; min-width:160px;" />
+              <button type="submit" class="small">Thêm</button>
+            </form>
+          </div>
+        `).join('')}
+      </div>`}
     </div>
   `;
 
   document.getElementById('btn-new').onclick = () => openGroupModal();
+
+  document.querySelectorAll('.group-card').forEach((card) => {
+    const groupId = card.dataset.id;
+
+    card.querySelectorAll('.chip').forEach((chip) => {
+      const subId = Number(chip.dataset.subId);
+      chip.querySelector('.chip-x').onclick = async () => {
+        if (!confirm('Xoá phân loại này?')) return;
+        try {
+          await api.del(`/groups/${encodeURIComponent(groupId)}/subtypes?subId=${subId}`);
+          rerender();
+        } catch (err) {
+          toast('Lỗi: ' + err.message);
+        }
+      };
+    });
+
+    card.querySelector('.add-subtype').onsubmit = async (e) => {
+      e.preventDefault();
+      const input = e.target.querySelector('input');
+      const name = input.value.trim();
+      if (!name) return;
+      try {
+        await api.post(`/groups/${encodeURIComponent(groupId)}/subtypes`, { name });
+        input.value = '';
+        rerender();
+      } catch (err) {
+        toast('Lỗi: ' + err.message);
+      }
+    };
+  });
 }
 
 function openGroupModal() {
   openModal(`
     <h3>Thêm nhóm</h3>
     <form id="group-form" class="form-grid">
-      <label>Tên
-        <input name="name" required />
+      <label class="full">Tên
+        <input name="name" required placeholder="VD: Quỹ dự phòng" />
       </label>
       <label>Icon (emoji)
         <input name="icon" placeholder="📦" maxlength="4" />
       </label>
-      <label class="full">Loại
+      <label>Loại
         <select name="type">
           <option value="Asset">Tài sản</option>
           <option value="Liability">Nợ phải trả</option>

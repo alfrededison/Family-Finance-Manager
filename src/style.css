@@ -241,6 +241,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   background: var(--surface-2);
   border: 1px solid var(--border);
 }
+.badge.pos { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+.badge.neg { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
 .member-chip {
   display: inline-block;
   padding: 2px 8px;
@@ -475,3 +477,90 @@ input:focus, select:focus, textarea:focus {
 
 /* Lock body when nav is open */
 body.nav-open { overflow: hidden; }
+
+/* Muted small text (used under asset names, group ids, etc.) */
+.muted-sm { color: var(--muted); font-size: 11px; }
+
+/* Chip list (platforms, subtypes) */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.chip-x {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  padding: 0 4px;
+  font-size: 13px;
+  min-height: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+.chip-x:hover { color: var(--danger); }
+
+/* Groups page — per-group card with subtype chips */
+.group-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.group-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: var(--surface);
+}
+.group-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.group-card-head > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Bank searchable select */
+.bank-select { position: relative; }
+.bank-search { width: 100%; }
+.bank-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 110;
+}
+.bank-row {
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+.bank-row:last-child { border-bottom: none; }
+.bank-row:hover { background: var(--surface-2); }
+.bank-row strong { color: var(--primary); margin-right: 4px; }
+.bank-row .bank-short { color: var(--muted); font-size: 11px; margin-left: 4px; }
+.bank-row-custom { font-style: italic; color: var(--muted); }
+.bank-row-custom strong { color: var(--text); font-style: normal; }
