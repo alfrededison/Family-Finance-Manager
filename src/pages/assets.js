@@ -40,15 +40,6 @@ export async function renderAssets(view) {
     </div>
   `;
 
-  document.getElementById('btn-new').onclick = () => openAssetModal(null, groups, members);
-
-  // PWA shortcut: /#/assets?new=1 opens the new-asset modal
-  const query = window.location.hash.split('?')[1] || '';
-  if (new URLSearchParams(query).get('new') === '1') {
-    history.replaceState(null, '', '#/assets');
-    openAssetModal(null, groups, members);
-  }
-
   let filterTimer;
   const reload = async () => {
     const q = document.getElementById('f-q').value;
@@ -60,8 +51,18 @@ export async function renderAssets(view) {
     if (member) params.set('member', member);
     const filtered = await api.get('/assets?' + params.toString());
     document.getElementById('asset-list').innerHTML = renderTable(filtered);
-    bindRowActions(filtered, groups, members);
+    bindRowActions(filtered, groups, members, reload);
   };
+
+  document.getElementById('btn-new').onclick = () => openAssetModal(null, groups, members, reload);
+
+  // PWA shortcut: /#/assets?new=1 opens the new-asset modal
+  const query = window.location.hash.split('?')[1] || '';
+  if (new URLSearchParams(query).get('new') === '1') {
+    history.replaceState(null, '', '#/assets');
+    openAssetModal(null, groups, members, reload);
+  }
+
   document.getElementById('f-q').oninput = () => {
     clearTimeout(filterTimer);
     filterTimer = setTimeout(reload, 200);
@@ -69,7 +70,7 @@ export async function renderAssets(view) {
   document.getElementById('f-group').onchange = reload;
   document.getElementById('f-member').onchange = reload;
 
-  bindRowActions(assets, groups, members);
+  bindRowActions(assets, groups, members, reload);
 }
 
 function renderTable(assets) {
@@ -126,17 +127,17 @@ function subInfoLine(a) {
   return `<div class="muted-sm">${bits.map(escapeHtml).join(' · ')}</div>`;
 }
 
-function bindRowActions(assets, groups, members) {
+function bindRowActions(assets, groups, members, reload) {
   document.querySelectorAll('#asset-list tr[data-id]').forEach((tr) => {
     const id = Number(tr.dataset.id);
     const asset = assets.find((a) => a.id === id);
-    tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, groups, members);
+    tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, groups, members, reload);
     tr.querySelector('[data-act="del"]').onclick = async () => {
       if (!confirm(`Xoá tài sản "${asset.name}"?`)) return;
       try {
         await api.del('/assets/' + id);
         toast('Đã xoá');
-        rerender();
+        await reload();
       } catch (err) {
         toast('Lỗi: ' + err.message);
       }
@@ -148,7 +149,7 @@ function bindRowActions(assets, groups, members) {
 // Modal — group selector swaps the entire form body
 // ────────────────────────────────────────────────────────────────────────────
 
-async function openAssetModal(asset, groups, members) {
+async function openAssetModal(asset, groups, members, reload) {
   const editing = !!asset;
   const initialGroup = asset?.group_id || groups[0]?.id || '';
 
@@ -175,7 +176,7 @@ async function openAssetModal(asset, groups, members) {
       bindBankSelect(formBody);
       bindMoneyInputs(formBody);
       bindFormBehaviour(groupId, formBody);
-      bindSubmit(groupId, formBody, asset, editing);
+      bindSubmit(groupId, formBody, asset, editing, reload);
     };
 
     groupSelect.addEventListener('change', () => mount(groupSelect.value));
@@ -470,7 +471,7 @@ function bindFormBehaviour(groupId, formBody) {
 // ────────────────────────────────────────────────────────────────────────────
 // Submit handler — collects form data, posts to API
 // ────────────────────────────────────────────────────────────────────────────
-function bindSubmit(groupId, formBody, asset, editing) {
+function bindSubmit(groupId, formBody, asset, editing, reload) {
   const form = formBody.querySelector('#asset-form');
   const cancelBtn = formBody.querySelector('#cancel');
   cancelBtn.onclick = closeModal;
@@ -496,7 +497,7 @@ function bindSubmit(groupId, formBody, asset, editing) {
       else await api.post('/assets', body);
       toast(editing ? 'Đã cập nhật' : 'Đã thêm');
       closeModal();
-      rerender();
+      await reload();
     } catch (err) {
       toast('Lỗi: ' + err.message);
     }
