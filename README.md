@@ -17,15 +17,12 @@ npm run db:migrate
 # 3. (Optional) seed sample data
 npm run db:seed
 
-# 4. Run locally
-# Terminal A: build the frontend so wrangler can serve it
-npm run build
-# Terminal B: start Pages dev server (functions + static)
-npx wrangler pages dev dist --d1=DB=finance-db
+# 4. Run locally (frontend HMR + backend live reload)
+npm run dev                  # vite on :5173 (HMR) + wrangler on :8788 (functions)
 
-# Or, for fast frontend HMR:
-npm run dev                  # vite on :5173, proxies /api to :8788
-npm run dev:functions        # wrangler on :8788
+# Or run them separately:
+npm run dev:frontend         # vite on :5173, proxies /api to :8788
+npm run dev:backend          # wrangler on :8788
 ```
 
 ## Deploy

@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler pages dev dist --port=8788",
+    "dev": "concurrently -k -n vite,wrangler -c blue,yellow \"npm:dev:frontend\" \"npm:dev:backend\"",
+    "dev:frontend": "vite",
+    "dev:backend": "wrangler pages dev public --port=8788",
     "build": "vite build",
     "icons": "bash scripts/generate-icons.sh",
     "deploy": "npm run build && wrangler pages deploy dist",
@@ -15,6 +17,7 @@
     "db:seed:local": "wrangler d1 execute finance-db --file=seed.sql"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "vite": "^5.4.0",
     "wrangler": "^3.80.0"
   }
