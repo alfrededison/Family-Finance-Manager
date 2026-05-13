@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { fmtVND, escapeHtml, openModal, closeModal, toast, rerender, bindMoneyInputs, parseMoneyPayload, parseMoney, formatMoney } from '../main.js';
+import { ASSET_GROUPS, enrichAsset } from '../data/groups.js';
 
 // Transaction fields holding VND amounts — formatted on input, parsed on submit.
 const TX_MONEY_FIELDS = ['unit_price', 'fee', 'tax', 'total', 'gross_interest'];
@@ -44,12 +45,12 @@ function typesForGroup(groupId) {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function renderTransactions(view) {
-  const [transactions, assets, members, groups] = await Promise.all([
+  const [transactions, rawAssets, members] = await Promise.all([
     api.get('/transactions'),
     api.get('/assets'),
     api.get('/members'),
-    api.get('/groups'),
   ]);
+  const assets = rawAssets.map(enrichAsset);
 
   view.innerHTML = `
     <div class="page-header">
@@ -62,7 +63,7 @@ export async function renderTransactions(view) {
         <input id="f-q" placeholder="Tìm kiếm..." style="flex:1; min-width:200px;" />
         <select id="f-group">
           <option value="">Tất cả nhóm</option>
-          ${groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
         </select>
         <select id="f-member">
           <option value="">Tất cả thành viên</option>
@@ -74,13 +75,13 @@ export async function renderTransactions(view) {
     </div>
   `;
 
-  document.getElementById('btn-new').onclick = () => openTxModal(assets, members, groups);
+  document.getElementById('btn-new').onclick = () => openTxModal(assets, members);
 
   // PWA shortcut: /#/transactions?new=1 opens the new-transaction modal
   const query = window.location.hash.split('?')[1] || '';
   if (new URLSearchParams(query).get('new') === '1') {
     history.replaceState(null, '', '#/transactions');
-    openTxModal(assets, members, groups);
+    openTxModal(assets, members);
   }
 
   let filterTimer;
@@ -147,16 +148,16 @@ function renderTable(txs) {
 // Modal — group selector → asset filtered to that group → type-specific fields
 // ────────────────────────────────────────────────────────────────────────────
 
-function openTxModal(allAssets, members, groups) {
+function openTxModal(allAssets, members) {
   const today = new Date().toISOString().slice(0, 10);
-  const initialGroup = groups[0]?.id || '';
+  const initialGroup = ASSET_GROUPS[0]?.id || '';
 
   openModal(`
     <h3>Thêm giao dịch</h3>
     <div class="form-grid" style="margin-bottom: 8px;">
       <label class="full">Nhóm tài sản
         <select id="t-group">
-          ${groups.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initialGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initialGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
         </select>
       </label>
     </div>
@@ -215,7 +216,7 @@ function renderTxForm(groupId, types, assetsInGroup, members, state) {
       <label class="full">Tài sản
         <select name="asset_id" required>
           <option value="">— Chọn —</option>
-          ${assetsInGroup.map((a) => `<option value="${a.id}" ${String(a.id) === String(state.asset_id) ? 'selected' : ''}>${escapeHtml(a.name)}${a.subtype ? ' · ' + escapeHtml(a.subtype) : ''}</option>`).join('')}
+          ${assetsInGroup.map((a) => `<option value="${a.id}" ${String(a.id) === String(state.asset_id) ? 'selected' : ''}>${escapeHtml(a.name)}${a.subtype_name ? ' · ' + escapeHtml(a.subtype_name) : ''}</option>`).join('')}
         </select>
       </label>
       <label>Thành viên

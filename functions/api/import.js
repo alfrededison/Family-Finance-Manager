@@ -2,10 +2,8 @@ import { json, error, readBody, nowISO } from '../_utils.js';
 
 // Column definitions per table (used to bind insert params consistently).
 const COLUMNS = {
-  members:        ['id', 'name', 'color', 'created_at'],
-  asset_groups:   ['id', 'name', 'icon', 'type', 'sort_order', 'active'],
-  asset_subtypes: ['id', 'group_id', 'name'],
-  platforms:      ['id', 'name'],
+  members:   ['id', 'name', 'color', 'created_at'],
+  platforms: ['id', 'name'],
   assets: [
     'id', 'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
     'cost_price', 'current_price', 'platform', 'term', 'maturity_date', 'bank',
@@ -24,9 +22,7 @@ const DELETE_ORDER = [
   'price_history',
   'transactions',
   'assets',
-  'asset_subtypes',
   'platforms',
-  'asset_groups',
   'members',
 ];
 
@@ -70,8 +66,6 @@ async function runReplace(env, data) {
 async function runMerge(env, data) {
   const stats = {};
   const memberMap = {};
-  const groupMap = {};
-  const subtypeMap = {};
   const platformMap = {};
   const assetMap = {};
 
@@ -83,40 +77,6 @@ async function runMerge(env, data) {
       [r.name, r.color || '#3b82f6', r.created_at || nowISO()]);
     memberMap[r.id] = newId;
     stats.members++;
-  }
-
-  // asset_groups (string-id slug) — keep existing if id matches, else insert
-  stats.asset_groups = 0;
-  for (const r of (data.asset_groups || [])) {
-    const existing = await env.DB.prepare('SELECT id FROM asset_groups WHERE id = ?').bind(r.id).first();
-    if (existing) {
-      groupMap[r.id] = r.id;
-    } else {
-      await env.DB.prepare(
-        'INSERT INTO asset_groups (id, name, icon, type, sort_order, active) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(r.id, r.name, r.icon || '📦', r.type === 'Liability' ? 'Liability' : 'Asset',
-             Number(r.sort_order || 0), Number(r.active ?? 1)).run();
-      groupMap[r.id] = r.id;
-      stats.asset_groups++;
-    }
-  }
-
-  // asset_subtypes — unique on (group_id, name)
-  stats.asset_subtypes = 0;
-  for (const r of (data.asset_subtypes || [])) {
-    const groupId = groupMap[r.group_id] || r.group_id;
-    const existing = await env.DB.prepare(
-      'SELECT id FROM asset_subtypes WHERE group_id = ? AND name = ?'
-    ).bind(groupId, r.name).first();
-    if (existing) {
-      subtypeMap[r.id] = existing.id;
-    } else {
-      const newId = await insertGetId(env,
-        'INSERT INTO asset_subtypes (group_id, name) VALUES (?, ?)',
-        [groupId, r.name]);
-      subtypeMap[r.id] = newId;
-      stats.asset_subtypes++;
-    }
   }
 
   // platforms — unique on name
@@ -144,7 +104,7 @@ async function runMerge(env, data) {
         status, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
-      r.name, groupMap[r.group_id] || r.group_id, r.subtype || null,
+      r.name, r.group_id, r.subtype || null,
       r.member_id != null ? (memberMap[r.member_id] ?? null) : null,
       Number(r.qty || 0), r.unit || null,
       Number(r.cost_price || 0), Number(r.current_price || 0),

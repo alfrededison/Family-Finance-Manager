@@ -3,19 +3,20 @@ import { fmtVND, fmtPct, escapeHtml, openModal, closeModal, toast, rerender, bin
 import { bankSelectHTML, bindBankSelect } from '../components/bank-select.js';
 import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
+import { ASSET_GROUPS, findGroup, enrichAsset } from '../data/groups.js';
 
 // Asset fields that hold VND amounts — tagged with data-money so they get
 // auto-formatted on input and parsed back to plain integers on submit.
 const MONEY_FIELDS = ['cost_price', 'current_price'];
 
-const BANK_SAVINGS_SUBTYPES = ['Tiết kiệm dài tháng', 'Tiết kiệm ít tháng'];
+const BANK_SAVINGS_SUBTYPES = ['tk-dai-thang', 'tk-it-thang'];
 
 export async function renderAssets(view) {
-  const [assets, groups, members] = await Promise.all([
+  const [rawAssets, members] = await Promise.all([
     api.get('/assets'),
-    api.get('/groups'),
     api.get('/members'),
   ]);
+  const assets = rawAssets.map(enrichAsset);
 
   view.innerHTML = `
     <div class="page-header">
@@ -28,7 +29,7 @@ export async function renderAssets(view) {
         <input id="f-q" placeholder="Tìm kiếm theo tên..." style="flex:1; min-width:200px;" />
         <select id="f-group">
           <option value="">Tất cả nhóm</option>
-          ${groups.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
         </select>
         <select id="f-member">
           <option value="">Tất cả thành viên</option>
@@ -41,6 +42,7 @@ export async function renderAssets(view) {
   `;
 
   let filterTimer;
+  let currentAssets = assets;
   const reload = async () => {
     const q = document.getElementById('f-q').value;
     const group = document.getElementById('f-group').value;
@@ -49,18 +51,19 @@ export async function renderAssets(view) {
     if (q) params.set('q', q);
     if (group) params.set('group', group);
     if (member) params.set('member', member);
-    const filtered = await api.get('/assets?' + params.toString());
+    const filtered = (await api.get('/assets?' + params.toString())).map(enrichAsset);
+    currentAssets = filtered;
     document.getElementById('asset-list').innerHTML = renderTable(filtered);
-    bindRowActions(filtered, groups, members, reload);
+    bindRowActions(filtered, members, reload);
   };
 
-  document.getElementById('btn-new').onclick = () => openAssetModal(null, groups, members, reload);
+  document.getElementById('btn-new').onclick = () => openAssetModal(null, members, reload);
 
   // PWA shortcut: /#/assets?new=1 opens the new-asset modal
   const query = window.location.hash.split('?')[1] || '';
   if (new URLSearchParams(query).get('new') === '1') {
     history.replaceState(null, '', '#/assets');
-    openAssetModal(null, groups, members, reload);
+    openAssetModal(null, members, reload);
   }
 
   document.getElementById('f-q').oninput = () => {
@@ -70,7 +73,7 @@ export async function renderAssets(view) {
   document.getElementById('f-group').onchange = reload;
   document.getElementById('f-member').onchange = reload;
 
-  bindRowActions(assets, groups, members, reload);
+  bindRowActions(currentAssets, members, reload);
 }
 
 function renderTable(assets) {
@@ -97,7 +100,7 @@ function renderTable(assets) {
             </td>
             <td>
               ${escapeHtml(a.group_icon)} ${escapeHtml(a.group_name)}
-              ${a.subtype ? `<div class="muted-sm">${escapeHtml(a.subtype)}</div>` : ''}
+              ${a.subtype_name ? `<div class="muted-sm">${escapeHtml(a.subtype_name)}</div>` : ''}
             </td>
             <td>${a.member_id ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>` : '—'}</td>
             <td class="num">${a.qty || 0} ${escapeHtml(a.unit || '')}</td>
@@ -128,11 +131,11 @@ function subInfoLine(a) {
   return `<div class="muted-sm">${bits.map(escapeHtml).join(' · ')}</div>`;
 }
 
-function bindRowActions(assets, groups, members, reload) {
+function bindRowActions(assets, members, reload) {
   document.querySelectorAll('#asset-list tr[data-id]').forEach((tr) => {
     const id = Number(tr.dataset.id);
     const asset = assets.find((a) => a.id === id);
-    tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, groups, members, reload);
+    tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, members, reload);
     tr.querySelector('[data-act="del"]').onclick = async () => {
       if (!confirm(`Xoá tài sản "${asset.name}"?`)) return;
       try {
@@ -150,16 +153,16 @@ function bindRowActions(assets, groups, members, reload) {
 // Modal — group selector swaps the entire form body
 // ────────────────────────────────────────────────────────────────────────────
 
-async function openAssetModal(asset, groups, members, reload) {
+async function openAssetModal(asset, members, reload) {
   const editing = !!asset;
-  const initialGroup = asset?.group_id || groups[0]?.id || '';
+  const initialGroup = asset?.group_id || ASSET_GROUPS[0]?.id || '';
 
   openModal(`
     <h3>${editing ? 'Sửa tài sản' : 'Thêm tài sản'}</h3>
     <div class="form-grid" style="margin-bottom: 8px;">
       <label class="full">Nhóm
         <select id="a-group" ${editing ? 'disabled' : ''}>
-          ${groups.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initialGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initialGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
         </select>
       </label>
     </div>
@@ -170,8 +173,7 @@ async function openAssetModal(asset, groups, members, reload) {
 
     const mount = async (groupId) => {
       formBody.innerHTML = '<div class="loading">Đang tải...</div>';
-      const group = groups.find((g) => g.id === groupId) || groups[0];
-      const subtypes = group?.subtypes || [];
+      const subtypes = findGroup(groupId)?.subtypes || [];
       const platforms = groupId === 'tien-gui' ? await api.get('/platforms') : [];
       formBody.innerHTML = renderGroupForm(groupId, subtypes, platforms, members, asset);
       bindBankSelect(formBody);
@@ -215,7 +217,7 @@ function fragSubtype(subtypes, asset, label = 'Loại') {
     <label>${escapeHtml(label)}
       <select name="subtype">
         <option value="">— Không —</option>
-        ${subtypes.map((s) => `<option value="${escapeHtml(s.name)}" ${asset?.subtype === s.name ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
+        ${subtypes.map((s) => `<option value="${escapeHtml(s.id)}" ${asset?.subtype === s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
       </select>
     </label>
   `;

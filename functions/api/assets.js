@@ -17,10 +17,8 @@ export async function onRequestGet({ env, request }) {
     if (q)       { where.push('(a.name LIKE ? OR a.notes LIKE ?)'); params.push(`%${q}%`, `%${q}%`); }
 
     const sql = `
-      SELECT a.*, g.name AS group_name, g.icon AS group_icon, g.type AS group_type,
-             m.name AS member_name, m.color AS member_color
+      SELECT a.*, m.name AS member_name, m.color AS member_color
       FROM assets a
-      JOIN asset_groups g ON g.id = a.group_id
       LEFT JOIN members m ON m.id = a.member_id
       WHERE ${where.join(' AND ')}
       ORDER BY a.id DESC

@@ -2,7 +2,6 @@ import { renderDashboard } from './pages/dashboard.js';
 import { renderAssets } from './pages/assets.js';
 import { renderTransactions } from './pages/transactions.js';
 import { renderMembers } from './pages/members.js';
-import { renderGroups } from './pages/groups.js';
 import { renderSettings } from './pages/settings.js';
 import { api } from './api.js';
 
@@ -11,7 +10,6 @@ const routes = {
   assets: renderAssets,
   transactions: renderTransactions,
   members: renderMembers,
-  groups: renderGroups,
   settings: renderSettings,
 };
 

@@ -2,8 +2,6 @@ import { json, error, nowISO } from '../_utils.js';
 
 const TABLES = [
   'members',
-  'asset_groups',
-  'asset_subtypes',
   'platforms',
   'assets',
   'transactions',

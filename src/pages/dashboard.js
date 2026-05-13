@@ -1,10 +1,12 @@
 import { api } from '../api.js';
 import { fmtVND, fmtPct, escapeHtml } from '../main.js';
 import { txTypeLabel } from './transactions.js';
+import { ASSET_GROUPS, findGroup } from '../data/groups.js';
 
 export async function renderDashboard(view) {
   const data = await api.get('/dashboard');
-  const { kpi, breakdown, transactions } = data;
+  const { assets, members, transactions } = data;
+  const { kpi, breakdown } = aggregate(assets, members);
 
   const maxGroupValue = Math.max(1, ...breakdown.byGroup.map((g) => g.value));
   const maxMemberValue = Math.max(1, ...breakdown.byMember.map((m) => Math.abs(m.value)));
@@ -86,3 +88,61 @@ export async function renderDashboard(view) {
   `;
 }
 
+// Computes KPIs + byGroup/byMember breakdowns from raw enriched-by-backend
+// asset rows. Group metadata (name/icon/type) comes from hard-coded list.
+function aggregate(assets, members) {
+  const memberById = Object.fromEntries((members || []).map((m) => [m.id, m]));
+
+  let totalAsset = 0;
+  let totalLiability = 0;
+  let totalCost = 0;
+  const byGroup = {};
+  const byMember = {};
+
+  for (const a of assets || []) {
+    const g = findGroup(a.group_id);
+    const isLiability = g?.type === 'Liability';
+    const value = a.value || 0;
+    const cost = a.cost || 0;
+    if (isLiability) totalLiability += value;
+    else totalAsset += value;
+    totalCost += cost;
+
+    const gk = a.group_id;
+    byGroup[gk] = byGroup[gk] || {
+      id: gk,
+      name: g?.name || gk,
+      icon: g?.icon || '📦',
+      type: g?.type || 'Asset',
+      value: 0, cost: 0, count: 0,
+    };
+    byGroup[gk].value += value;
+    byGroup[gk].cost += cost;
+    byGroup[gk].count += 1;
+
+    if (a.member_id) {
+      const m = memberById[a.member_id];
+      const mk = a.member_id;
+      byMember[mk] = byMember[mk] || {
+        id: mk,
+        name: m?.name || '—',
+        color: m?.color || '#3b82f6',
+        value: 0, count: 0,
+      };
+      byMember[mk].value += isLiability ? -value : value;
+      byMember[mk].count += 1;
+    }
+  }
+
+  const netWorth = totalAsset - totalLiability;
+  const pnl = totalAsset - totalCost;
+  const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+
+  return {
+    kpi: { netWorth, totalAsset, totalLiability, totalCost, pnl, pnlPct },
+    breakdown: {
+      byGroup: Object.values(byGroup).sort((a, b) => b.value - a.value),
+      byMember: Object.values(byMember).sort((a, b) => b.value - a.value),
+    },
+  };
+}

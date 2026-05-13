@@ -5,8 +5,6 @@ PRAGMA foreign_keys = ON;
 DROP TABLE IF EXISTS price_history;
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS assets;
-DROP TABLE IF EXISTS asset_subtypes;
-DROP TABLE IF EXISTS asset_groups;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
 
@@ -17,34 +15,17 @@ CREATE TABLE members (
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
--- Asset groups use slug-style string IDs so the frontend can branch on them
-CREATE TABLE asset_groups (
-  id         TEXT    PRIMARY KEY,            -- 'dau-tu', 'tich-tru', 'cho-vay', 'di-vay', 'tien-gui', 'bank'
-  name       TEXT    NOT NULL,
-  icon       TEXT    NOT NULL DEFAULT '📦',
-  type       TEXT    NOT NULL CHECK (type IN ('Asset', 'Liability')),
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  active     INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE asset_subtypes (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  group_id TEXT    NOT NULL REFERENCES asset_groups(id),
-  name     TEXT    NOT NULL,
-  UNIQUE (group_id, name)
-);
-
-CREATE INDEX idx_subtypes_group ON asset_subtypes(group_id);
-
 CREATE TABLE platforms (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT    NOT NULL UNIQUE
 );
 
+-- Asset groups + subtypes are hard-coded in src/data/groups.js.
+-- Stored values here are slug IDs (e.g. group_id='dau-tu', subtype='co-phieu').
 CREATE TABLE assets (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   name           TEXT    NOT NULL,
-  group_id       TEXT    NOT NULL REFERENCES asset_groups(id),
+  group_id       TEXT    NOT NULL,
   subtype        TEXT,
   member_id      INTEGER REFERENCES members(id),
   qty            REAL    NOT NULL DEFAULT 0,
