@@ -43,8 +43,33 @@ export function computeAccrualPnl(a) {
   return principal * (a.interest_rate / 100) * years * (1 - taxRate);
 }
 
+// Forward-looking interest for cho-vay / đi-vay:
+//   - has start_date + end_date: full period interest = principal × rate × years
+//   - else: one month of interest = principal × rate / 12
+// Returns null when inputs are insufficient.
+export function computeLoanInterest(a) {
+  if (a.interest_rate == null) return null;
+  const principal = a.cost_price || 0;
+  if (principal <= 0) return null;
+  const ratePct = a.interest_rate / 100;
+
+  if (a.start_date && a.end_date) {
+    const start = new Date(a.start_date);
+    const end = new Date(a.end_date);
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start) {
+      const years = (end - start) / 86400000 / 365;
+      return principal * ratePct * years;
+    }
+  }
+  return principal * ratePct / 12;
+}
+
 // Returns { value, cost, pnl, pnlPct } for an asset row.
-// Bank/tiền gửi use accrued interest; everything else uses qty × price diff.
+// - Bank / tiền gửi: accrued interest = principal × rate × time.
+// - Cho vay / đi vay: forward-looking interest (monthly, or total to maturity).
+//   pnl = +interest (cho-vay) or −interest (đi-vay). cost equals value so the
+//   dashboard's value-cost rollup isn't polluted by remaining-balance changes.
+// - Everything else: qty × price diff.
 export function computeAssetMetrics(a) {
   if (a.group_id === 'bank' || a.group_id === 'tien-gui') {
     const principal = a.group_id === 'bank' ? (a.current_price || 0) : (a.cost_price || 0);
@@ -53,6 +78,14 @@ export function computeAssetMetrics(a) {
     const value = principal + pnl;
     const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
     return { value, cost, pnl, pnlPct };
+  }
+  if (a.group_id === 'cho-vay' || a.group_id === 'di-vay') {
+    const value = (a.qty || 0) * (a.current_price || 0);
+    const interest = computeLoanInterest(a);
+    const pnl = interest == null ? null : (a.group_id === 'di-vay' ? -interest : interest);
+    const principal = a.cost_price || 0;
+    const pnlPct = pnl != null && principal > 0 ? (pnl / principal) * 100 : null;
+    return { value, cost: value, pnl, pnlPct };
   }
   const value = (a.qty || 0) * (a.current_price || 0);
   const cost = (a.qty || 0) * (a.cost_price || 0);

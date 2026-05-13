@@ -105,7 +105,7 @@ function renderTable(assets) {
             <td>${a.member_id ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>` : '—'}</td>
             <td class="num">${a.qty || 0} ${escapeHtml(a.unit || '')}</td>
             <td class="num"><strong>${fmtVND(a.value)}</strong></td>
-            <td class="num ${a.pnl >= 0 ? 'pos' : 'neg'}">
+            <td class="num ${a.pnl == null ? '' : (a.pnl >= 0 ? 'pos' : 'neg')}">
               ${fmtVND(a.pnl)}<br/><small>${fmtPct(a.pnlPct)}</small>
             </td>
             <td>
