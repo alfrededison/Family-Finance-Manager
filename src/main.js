@@ -61,8 +61,35 @@ navBackdrop.addEventListener('click', closeNav);
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+
+      const promptUpdate = (worker) => {
+        toast('Có phiên bản mới', {
+          label: 'Tải lại',
+          onClick: () => {
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+              window.location.reload();
+            }, { once: true });
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          },
+        });
+      };
+
+      // SW already waiting from a previous load (and a controller is in charge).
+      if (reg.waiting && navigator.serviceWorker.controller) promptUpdate(reg.waiting);
+
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            promptUpdate(newWorker);
+          }
+        });
+      });
+    } catch {}
   });
 }
 
@@ -76,12 +103,24 @@ if ('serviceWorker' in navigator) {
   router();
 })();
 
-export function toast(msg) {
+export function toast(msg, action) {
   const el = document.getElementById('toast');
   el.textContent = msg;
+  el.classList.toggle('toast-interactive', !!action);
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      el.classList.remove('show');
+      action.onClick();
+    });
+    el.appendChild(btn);
+  }
   el.classList.add('show');
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove('show'), 2800);
+  if (!action) el._t = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
 export function escapeHtml(s) {

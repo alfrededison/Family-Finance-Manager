@@ -405,6 +405,24 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 .toast.show { opacity: 1; transform: translateY(0); }
+.toast.toast-interactive {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.toast-action {
+  margin-left: auto;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-action:hover { background: rgba(255,255,255,0.25); }
 
 /* Modal */
 .modal-overlay {
