@@ -187,8 +187,6 @@ async function openAssetModal(asset, members, reload) {
   });
 }
 
-// Picks the right renderer by group id (slug). Unknown groups fall back to a
-// generic form so user-created groups still work.
 function renderGroupForm(groupId, subtypes, platforms, members, asset) {
   switch (groupId) {
     case 'dau-tu':   return formDauTu(subtypes, members, asset);
@@ -197,7 +195,6 @@ function renderGroupForm(groupId, subtypes, platforms, members, asset) {
     case 'di-vay':   return formDiVay(subtypes, members, asset);
     case 'tien-gui': return formTienGui(subtypes, platforms, members, asset);
     case 'bank':     return formBank(subtypes, members, asset);
-    default:         return formGeneric(subtypes, members, asset);
   }
 }
 
@@ -433,32 +430,6 @@ function formBank(subtypes, members, asset) {
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="cost_price" value="${a.cost_price ?? 0}" />
     <input type="hidden" name="unit" value="VND" />
-    ${fragActions(!!asset)}
-  </form>`;
-}
-
-// ─── Generic fallback (for user-created groups) ────────────────────────────
-function formGeneric(subtypes, members, asset) {
-  const a = asset || {};
-  return `<form id="asset-form" class="form-grid">
-    <label class="full">Tên
-      <input name="name" required value="${escapeHtml(a.name || '')}" />
-    </label>
-    ${fragSubtype(subtypes, a)}
-    ${fragMember(members, a)}
-    <label>Số lượng
-      <input name="qty" type="number" step="any" value="${a.qty ?? 0}" />
-    </label>
-    <label>Đơn vị
-      <input name="unit" value="${escapeHtml(a.unit || '')}" />
-    </label>
-    <label>Giá vốn / đơn vị
-      <input name="cost_price" type="text" inputmode="numeric" data-money value="${a.cost_price ?? 0}" />
-    </label>
-    <label>Giá hiện tại / đơn vị
-      <input name="current_price" type="text" inputmode="numeric" data-money value="${a.current_price ?? 0}" />
-    </label>
-    ${fragNotes(a)}
     ${fragActions(!!asset)}
   </form>`;
 }

@@ -119,7 +119,7 @@ function renderGroupDrilldown(assets, groupId) {
     const key = a.subtype || '__none__';
     bySub[key] = bySub[key] || {
       id: key,
-      name: a.subtype ? (findSubtype(groupId, a.subtype)?.name || a.subtype) : 'Khác',
+      name: findSubtype(groupId, a.subtype)?.name || 'Khác',
       value: 0,
       count: 0,
     };

@@ -22,7 +22,7 @@ export const TX_TYPES = [
   { value: 'pay_principal',      label: 'Trả vốn',       groups: ['di-vay'],             direction: 'out' },
   { value: 'pay_interest',       label: 'Trả lãi',       groups: ['di-vay'],             direction: 'out' },
   { value: 'settle_in',          label: 'Tất toán',      groups: ['di-vay'],             direction: 'out' },
-  // Generic fallback (Tiền gửi, Bank, custom groups)
+  // Tiền gửi, Bank
   { value: 'deposit',            label: 'Nạp / Gửi',     groups: ['tien-gui', 'bank'],   direction: 'out' },
   { value: 'withdraw',           label: 'Rút',           groups: ['tien-gui', 'bank'],   direction: 'in'  },
   { value: 'interest_in',        label: 'Nhận lãi',      groups: ['tien-gui', 'bank'],   direction: 'in'  },

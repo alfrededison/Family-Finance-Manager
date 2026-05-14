@@ -83,36 +83,17 @@ export function findSubtype(groupId, subtypeId) {
 }
 
 // Adds group_name/icon/type and a resolved subtype_name onto an asset row.
-// Also auto-migrates legacy assets where `subtype` stored the display name —
-// when no id matches, we look up by name and rewrite the field to the id, so
-// the next save persists the stable slug.
 export function enrichAsset(a) {
   const g = BY_ID[a.group_id];
   if (!g) return a;
 
-  let subtype = a.subtype;
-  let subtype_name = '';
-  if (subtype) {
-    const byId = g.subtypes.find((s) => s.id === subtype);
-    if (byId) {
-      subtype_name = byId.name;
-    } else {
-      const byName = g.subtypes.find((s) => s.name === subtype);
-      if (byName) {
-        subtype = byName.id;
-        subtype_name = byName.name;
-      } else {
-        subtype_name = subtype; // unknown — display raw value
-      }
-    }
-  }
+  const subtype_name = g.subtypes.find((s) => s.id === a.subtype)?.name ?? '';
 
   return {
     ...a,
     group_name: g.name,
     group_icon: g.icon,
     group_type: g.type,
-    subtype,
     subtype_name,
   };
 }
