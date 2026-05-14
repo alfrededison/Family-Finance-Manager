@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
+DROP TABLE IF EXISTS settings;
 
 CREATE TABLE members (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +45,7 @@ CREATE TABLE assets (
   start_date     TEXT,
   end_date       TEXT,
   notes          TEXT,
+  ticker         TEXT,
   status         TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'deleted')),
   created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
@@ -85,3 +87,8 @@ CREATE TABLE price_history (
 );
 
 CREATE INDEX idx_price_asset ON price_history(asset_id, recorded_at);
+
+CREATE TABLE settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

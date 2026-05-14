@@ -24,6 +24,11 @@ export async function onRequestPost({ env }) {
       env.DB.prepare("INSERT INTO platforms (name) VALUES ('VPBank')"),
       env.DB.prepare("INSERT INTO platforms (name) VALUES ('VIB')"),
       env.DB.prepare("INSERT INTO platforms (name) VALUES ('TPBank')"),
+
+      env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('market.provider.vang', '\"doji\"')"),
+      env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('market.provider.usd', '\"tygiausd\"')"),
+      env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('market.schedule.time', '\"17:00\"')"),
+      env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('market.schedule.enabled', 'true')"),
     ]);
 
     return json({ ok: true, seeded: true });

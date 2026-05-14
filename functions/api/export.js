@@ -6,6 +6,7 @@ const TABLES = [
   'assets',
   'transactions',
   'price_history',
+  'settings',
 ];
 
 // GET /api/export — dump all tables as JSON

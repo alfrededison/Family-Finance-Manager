@@ -259,6 +259,9 @@ function formDauTu(subtypes, members, asset) {
     <label>Giá hiện tại / đơn vị
       <input name="current_price" type="text" inputmode="numeric" data-money value="${a.current_price ?? 0}" />
     </label>
+    <label class="full">Mã ticker <span class="muted-sm">(để lấy giá tự động sau này)</span>
+      <input name="ticker" value="${escapeHtml(a.ticker || '')}" placeholder="VD: VNM, bitcoin, VESAF" />
+    </label>
     ${fragNotes(a)}
     ${fragActions(!!asset)}
   </form>`;

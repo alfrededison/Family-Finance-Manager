@@ -539,6 +539,8 @@ input:focus, select:focus, textarea:focus {
   .toolbar { gap: 8px; }
   .toolbar > input,
   .toolbar > select { flex: 1 1 100%; min-width: 0; }
+  .toolbar > .fetch-timestamp { flex: 1 1 100%; }
+  .provider-price .muted-sm { display: block; }
 
   .form-grid {
     grid-template-columns: 1fr;
@@ -656,3 +658,52 @@ body.nav-open { overflow: hidden; }
 .bank-row .bank-short { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .bank-row-custom { font-style: italic; color: var(--muted); }
 .bank-row-custom strong { color: var(--text); font-style: normal; }
+
+/* Market provider rows */
+.market-subtype { margin-bottom: 16px; }
+.market-subtype h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin: 0 0 6px; }
+.provider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.provider-row--default { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
+.provider-name { font-weight: 500; min-width: 120px; }
+.provider-price { flex: 1; font-size: 13px; }
+.icon-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  min-height: 28px;
+}
+.icon-btn:hover { background: var(--surface-2); }
+button.secondary.active { border-color: var(--primary); color: var(--primary); }
+.provider-toggle { display: inline-flex; align-items: center; cursor: pointer; flex-shrink: 0; }
+.provider-toggle input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.provider-toggle-track {
+  width: 36px; height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s;
+}
+.provider-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 14px; height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.provider-toggle input[type="radio"]:checked + .provider-toggle-track { background: var(--primary); }
+.provider-toggle input[type="radio"]:checked + .provider-toggle-track::after { transform: translateX(16px); }

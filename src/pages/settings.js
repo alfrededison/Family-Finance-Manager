@@ -1,5 +1,10 @@
 import { api } from '../api.js';
-import { escapeHtml, toast, rerender } from '../main.js';
+import { escapeHtml, toast, rerender, fmtVND } from '../main.js';
+
+const MARKET_SUBTYPE_LABELS = {
+  vang: 'Vàng',
+  usd:  'USD',
+};
 
 export async function renderSettings(view) {
   view.innerHTML = `
@@ -12,6 +17,12 @@ export async function renderSettings(view) {
         <input id="platform-name" placeholder="Tên nền tảng (VD: Topi)" required style="flex:1; min-width:200px;" />
         <button type="submit">+ Thêm nền tảng</button>
       </form>
+    </div>
+
+    <div class="section">
+      <h2>Giá thị trường</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">Nguồn dữ liệu và lịch cập nhật giá tự động.</p>
+      <div id="market-settings"></div>
     </div>
 
     <div class="section">
@@ -40,6 +51,7 @@ export async function renderSettings(view) {
   `;
 
   await reloadPlatforms();
+  await reloadMarketSettings();
 
   document.getElementById('platform-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -58,6 +70,154 @@ export async function renderSettings(view) {
 
   document.getElementById('export-btn').onclick = onExport;
   document.getElementById('import-form').onsubmit = onImport;
+}
+
+async function reloadMarketSettings() {
+  const container = document.getElementById('market-settings');
+  if (!container) return;
+
+  const [providers, settings] = await Promise.all([
+    api.get('/providers'),
+    api.get('/settings'),
+  ]);
+
+  // Group providers by subtype
+  const bySubtype = {};
+  for (const p of providers) {
+    for (const st of p.subtypes) {
+      if (!bySubtype[st]) bySubtype[st] = [];
+      bySubtype[st].push(p);
+    }
+  }
+
+  const subtypes = Object.keys(MARKET_SUBTYPE_LABELS);
+  const providerRows = subtypes.map((st) => {
+    const label = MARKET_SUBTYPE_LABELS[st];
+    const list = bySubtype[st] || [];
+    const defaultId = settings[`market.provider.${st}`];
+    const rows = list.map((p) => {
+      const cache = settings[`market.cache.${st}.${p.id}`];
+      const priceLabel = cache
+        ? `${fmtVND(cache.price)} <span class="muted-sm">${new Date(cache.fetched_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</span>`
+        : '<span class="muted-sm">—</span>';
+      const isDefault = defaultId === p.id;
+      return `
+        <div class="provider-row${isDefault ? ' provider-row--default' : ''}"
+             data-provider="${escapeHtml(p.id)}" data-subtype="${escapeHtml(st)}">
+          <span class="provider-name">${escapeHtml(p.name)}</span>
+          <span class="provider-price">${priceLabel}</span>
+          <button type="button" class="btn-provider-refresh icon-btn" title="Lấy giá">↻</button>
+          <label class="provider-toggle" title="Đặt mặc định">
+            <input type="radio" name="provider-default-${escapeHtml(st)}" value="${escapeHtml(p.id)}" ${isDefault ? 'checked' : ''} class="btn-provider-default">
+            <span class="provider-toggle-track"></span>
+          </label>
+        </div>`;
+    }).join('');
+    return `<div class="market-subtype"><h3>${escapeHtml(label)}</h3>${rows}</div>`;
+  }).join('');
+
+  const schedEnabled = settings['market.schedule.enabled'] ?? true;
+  const schedTime = settings['market.schedule.time'] ?? '17:00';
+
+  container.innerHTML = `
+    ${providerRows}
+    <div class="toolbar" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="sched-enabled" ${schedEnabled ? 'checked' : ''} />
+        Tự động cập nhật mỗi ngày
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;">
+        Lúc <input type="time" id="sched-time" value="${escapeHtml(schedTime)}" style="width:110px;" />
+      </label>
+    </div>
+    <div class="toolbar" style="margin-top:8px;">
+      <button type="button" id="btn-fetch-all">↻ Làm mới tất cả</button>
+    </div>
+  `;
+
+  // Provider 🔄 buttons
+  container.querySelectorAll('.btn-provider-refresh').forEach((btn) => {
+    btn.onclick = async () => {
+      const row = btn.closest('[data-provider]');
+      const providerId = row.dataset.provider;
+      const subtype = row.dataset.subtype;
+      btn.disabled = true;
+      try {
+        const res = await api.post('/market-data/fetch', { provider: providerId, subtype });
+        const r = res.results?.[0];
+        if (r?.error) {
+          toast('Lỗi: ' + r.error);
+        } else {
+          const updated = r?.assetsUpdated ?? 0;
+          let msg;
+          if (!r?.isDefault) {
+            msg = 'Đã lấy giá (không phải nhà cung cấp mặc định)';
+          } else if (updated > 0) {
+            msg = `Đã cập nhật giá — ${updated} tài sản`;
+          } else {
+            msg = 'Đã lấy giá (chưa có tài sản thuộc loại này)';
+          }
+          toast(msg);
+          await reloadMarketSettings();
+        }
+      } catch (err) {
+        toast('Lỗi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  // Provider default toggle radios
+  container.querySelectorAll('.btn-provider-default').forEach((input) => {
+    input.onchange = async () => {
+      const row = input.closest('[data-provider]');
+      const providerId = row.dataset.provider;
+      const subtype = row.dataset.subtype;
+      try {
+        await api.post('/settings', { key: `market.provider.${subtype}`, value: providerId });
+        toast('Đã đặt mặc định');
+        await reloadMarketSettings();
+      } catch (err) {
+        toast('Lỗi: ' + err.message);
+      }
+    };
+  });
+
+  // Schedule enabled toggle
+  document.getElementById('sched-enabled').onchange = async (e) => {
+    try {
+      await api.post('/settings', { key: 'market.schedule.enabled', value: e.target.checked });
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    }
+  };
+
+  // Schedule time input
+  document.getElementById('sched-time').onchange = async (e) => {
+    try {
+      await api.post('/settings', { key: 'market.schedule.time', value: e.target.value });
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    }
+  };
+
+  // Fetch all button
+  document.getElementById('btn-fetch-all').onclick = async () => {
+    const btn = document.getElementById('btn-fetch-all');
+    btn.disabled = true;
+    btn.textContent = '↻ Đang lấy giá...';
+    try {
+      const res = await api.post('/market-data/fetch', {});
+      toast(`Đã cập nhật giá — ${res.assetsUpdated ?? 0} tài sản`);
+      await reloadMarketSettings();
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '↻ Làm mới tất cả';
+    }
+  };
 }
 
 async function reloadPlatforms() {
