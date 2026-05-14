@@ -19,9 +19,10 @@ export function nowISO() {
   return new Date().toISOString();
 }
 
-// Accrued interest for bank / tiền gửi:
+// Interest for bank / tiền gửi:
 //   principal × (rate/100) × years × (1 − tax)
-// Time caps at maturity_date if it has passed.
+// Fixed-term (has maturity_date): uses full term (start → maturity).
+// Flexible (no maturity_date): uses elapsed time (start → today).
 export function computeAccrualPnl(a) {
   if (a.group_id !== 'bank' && a.group_id !== 'tien-gui') return 0;
   if (a.interest_rate == null || !a.start_date) return 0;
@@ -29,10 +30,12 @@ export function computeAccrualPnl(a) {
   const start = new Date(a.start_date);
   if (isNaN(start.getTime())) return 0;
 
-  let end = new Date();
+  let end;
   if (a.maturity_date) {
     const mat = new Date(a.maturity_date);
-    if (!isNaN(mat.getTime()) && mat < end) end = mat;
+    end = isNaN(mat.getTime()) ? new Date() : mat;
+  } else {
+    end = new Date();
   }
   if (end < start) return 0;
 
@@ -65,7 +68,7 @@ export function computeLoanInterest(a) {
 }
 
 // Returns { value, cost, pnl, pnlPct } for an asset row.
-// - Bank / tiền gửi: accrued interest = principal × rate × time.
+// - Bank / tiền gửi: interest to maturity (if fixed-term) or accrued to today (if flexible).
 // - Cho vay / đi vay: forward-looking interest (monthly, or total to maturity).
 //   pnl = +interest (cho-vay) or −interest (đi-vay). cost equals value so the
 //   dashboard's value-cost rollup isn't polluted by remaining-balance changes.
