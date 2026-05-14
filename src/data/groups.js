@@ -63,8 +63,7 @@ export const ASSET_GROUPS = [
     type: 'Asset',
     subtypes: [
       { id: 'tk-tu-do',    name: 'TK tự do' },
-      { id: 'tk-dai-thang', name: 'Tiết kiệm dài tháng' },
-      { id: 'tk-it-thang',  name: 'Tiết kiệm ít tháng' },
+      { id: 'so-tiet-kiem', name: 'Sổ tiết kiệm' },
     ],
   },
 ];

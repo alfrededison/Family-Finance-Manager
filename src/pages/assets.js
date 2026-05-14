@@ -9,7 +9,7 @@ import { ASSET_GROUPS, findGroup, enrichAsset } from '../data/groups.js';
 // auto-formatted on input and parsed back to plain integers on submit.
 const MONEY_FIELDS = ['cost_price', 'current_price'];
 
-const BANK_SAVINGS_SUBTYPES = ['tk-dai-thang', 'tk-it-thang'];
+const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
 
 export async function renderAssets(view) {
   const [rawAssets, members] = await Promise.all([
@@ -451,7 +451,7 @@ function bindFormBehaviour(groupId, formBody) {
   if (!subtypeEl || !savingsEls.length) return;
 
   const toggle = () => {
-    const show = BANK_SAVINGS_SUBTYPES.includes(subtypeEl.value);
+    const show = subtypeEl.value === BANK_SAVINGS_SUBTYPE;
     savingsEls.forEach((el) => { el.style.display = show ? '' : 'none'; });
   };
   subtypeEl.addEventListener('change', toggle);
@@ -523,7 +523,7 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
     if (groupId === 'tien-gui') {
       body.current_price = body.cost_price;
     }
-    if (groupId === 'bank' && !BANK_SAVINGS_SUBTYPES.includes(body.subtype)) {
+    if (groupId === 'bank' && body.subtype !== BANK_SAVINGS_SUBTYPE) {
       body.maturity_date = null;
       body.term = null;
     }

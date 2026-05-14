@@ -32,7 +32,7 @@ export async function renderDashboard(view) {
 
 function paint() {
   const { assets, members } = _data;
-  const { kpi, byGroup, byMember } = aggregate(assets, members);
+  const { kpi, byGroup, byMember, byLiquidity } = aggregate(assets, members);
 
   const groupSection = _selectedGroup
     ? renderGroupDrilldown(assets, _selectedGroup)
@@ -47,13 +47,14 @@ function paint() {
 
     <div class="kpi-grid">
       <div class="kpi-card">
-        <div class="label">Tài sản ròng</div>
+        <div class="label">Tài sản dự kiến</div>
         <div class="value ${kpi.netWorth >= 0 ? 'pos' : 'neg'}">${fmtVND(kpi.netWorth)}</div>
         <div class="sub">Tổng tài sản − Nợ phải trả</div>
       </div>
       <div class="kpi-card">
-        <div class="label">Tổng tài sản</div>
-        <div class="value">${fmtVND(kpi.totalAsset)}</div>
+        <div class="label">Tài sản khả dụng</div>
+        <div class="value">${fmtVND(kpi.liquidAsset)}</div>
+        <div class="sub">Có thể dùng ngay</div>
       </div>
       <div class="kpi-card">
         <div class="label">Nợ phải trả</div>
@@ -66,6 +67,7 @@ function paint() {
       </div>
     </div>
 
+    <div class="section" data-section="liquidity">${renderLiquidityChart(byLiquidity)}</div>
     <div class="section" data-section="group">${groupSection}</div>
     <div class="section" data-section="member">${memberSection}</div>
   `;
@@ -194,6 +196,76 @@ function renderMemberDrilldown(assets, members, memberId) {
   `;
 }
 
+function renderLiquidityChart(byLiquidity) {
+  const { liquid, illiquid } = byLiquidity;
+  const liquidTotal = liquid.reduce((s, x) => s + x.value, 0);
+  const illiquidTotal = illiquid.reduce((s, x) => s + x.value, 0);
+  const total = liquidTotal + illiquidTotal;
+
+  if (total === 0) {
+    return `<h2>Khả dụng / Không khả dụng</h2><div class="empty">Chưa có dữ liệu</div>`;
+  }
+
+  const topSlices = [
+    { key: 'liquid', name: 'Khả dụng', value: liquidTotal, color: '#10b981' },
+    { key: 'illiquid', name: 'Không khả dụng', value: illiquidTotal, color: '#94a3b8' },
+  ].filter((s) => s.value > 0);
+
+  const makeLegendRows = (items, headerLabel, headerColor) => {
+    if (items.length === 0) return '';
+    const rows = items.map((item) => {
+      const pct = (item.value / total) * 100;
+      return `
+        <div class="pie-legend-row">
+          <span class="legend-dot" style="background:${item.color}"></span>
+          <span class="legend-name">${escapeHtml(item.name)}</span>
+          <span class="legend-value">${fmtVND(item.value)}</span>
+          <span class="legend-pct">${pct.toFixed(1)}%</span>
+        </div>`;
+    }).join('');
+    const sectionPct = (items.reduce((s, x) => s + x.value, 0) / total * 100).toFixed(1);
+    return `
+      <div class="legend-section-header" style="color:${headerColor}">${escapeHtml(headerLabel)} <span class="legend-pct">${sectionPct}%</span></div>
+      ${rows}`;
+  };
+
+  const size = 240, cx = size / 2, cy = size / 2, r = size / 2 - 4;
+  let cumulative = 0;
+  const paths = topSlices.map((s) => {
+    const startAngle = (cumulative / total) * Math.PI * 2;
+    cumulative += s.value;
+    const endAngle = (cumulative / total) * Math.PI * 2;
+    const pct = (s.value / total) * 100;
+    let shape;
+    if (topSlices.length === 1) {
+      shape = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${s.color}" />`;
+    } else {
+      const largeArc = (endAngle - startAngle) > Math.PI ? 1 : 0;
+      const x1 = cx + r * Math.sin(startAngle), y1 = cy - r * Math.cos(startAngle);
+      const x2 = cx + r * Math.sin(endAngle), y2 = cy - r * Math.cos(endAngle);
+      shape = `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${s.color}" />`;
+    }
+    let label = '';
+    if (pct >= 6) {
+      const midAngle = (startAngle + endAngle) / 2;
+      const lx = cx + r * 0.65 * Math.sin(midAngle), ly = cy - r * 0.65 * Math.cos(midAngle);
+      label = `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" class="pie-slice-label" text-anchor="middle" dominant-baseline="central">${pct.toFixed(1)}%</text>`;
+    }
+    return `<g><title>${escapeHtml(s.name)}: ${fmtVND(s.value)} (${pct.toFixed(1)}%)</title>${shape}${label}</g>`;
+  }).join('');
+
+  const legendHtml = makeLegendRows(liquid, '✅ Khả dụng', '#10b981')
+    + makeLegendRows(illiquid, '🔒 Không khả dụng', '#94a3b8');
+
+  return `
+    <h2>Khả dụng / Không khả dụng</h2>
+    <div class="pie-wrap">
+      <svg class="pie-svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-label="Liquidity chart">${paths}</svg>
+      <div class="pie-legend">${legendHtml}</div>
+    </div>
+  `;
+}
+
 // ─── Pie chart primitive ────────────────────────────────────────────────────
 
 function renderPie(slices, clickGroup, emptyText) {
@@ -260,14 +332,42 @@ function renderPie(slices, clickGroup, emptyText) {
 
 // Computes KPIs + byGroup/byMember breakdowns from raw enriched-by-backend
 // asset rows. Group metadata (name/icon/type) comes from hard-coded list.
+// Always illiquid regardless of term.
+const ALWAYS_ILLIQUID = new Set([
+  'tich-tru/bds',
+  'cho-vay/cho-vay-lau-dai',
+]);
+
+// Illiquid when maturity_date is more than 1 month away; liquid otherwise.
+const MATURITY_ILLIQUID = new Set([
+  'tien-gui/tg-co-dinh',
+  'bank/so-tiet-kiem',
+]);
+
+function isLiquid(a) {
+  const g = findGroup(a.group_id);
+  if (!g || g.type === 'Liability') return false;
+  const key = `${a.group_id}/${a.subtype}`;
+  if (ALWAYS_ILLIQUID.has(key)) return false;
+  if (MATURITY_ILLIQUID.has(key)) {
+    if (!a.maturity_date) return true;
+    const daysLeft = (new Date(a.maturity_date) - Date.now()) / 86_400_000;
+    return daysLeft <= 30;
+  }
+  return true;
+}
+
 function aggregate(assets, members) {
   const memberById = Object.fromEntries((members || []).map((m) => [m.id, m]));
 
   let totalAsset = 0;
   let totalLiability = 0;
   let totalCost = 0;
+  let liquidAsset = 0;
   const byGroup = {};
   const byMember = {};
+  const liquidBuckets = {};
+  const illiquidBuckets = {};
 
   for (const a of assets || []) {
     const g = findGroup(a.group_id);
@@ -277,6 +377,19 @@ function aggregate(assets, members) {
     if (isLiability) totalLiability += value;
     else totalAsset += value;
     totalCost += cost;
+    const liquid = isLiquid(a);
+    if (liquid) liquidAsset += value;
+
+    if (!isLiability) {
+      const subtype = findSubtype(a.group_id, a.subtype);
+      const bucketKey = `${a.group_id}/${a.subtype || '__none__'}`;
+      const bucketName = subtype
+        ? `${g?.icon || ''} ${g?.name} — ${subtype.name}`
+        : `${g?.icon || ''} ${g?.name || a.group_id}`;
+      const buckets = liquid ? liquidBuckets : illiquidBuckets;
+      buckets[bucketKey] = buckets[bucketKey] || { name: bucketName, value: 0, color: GROUP_COLORS[a.group_id] || PALETTE[0] };
+      buckets[bucketKey].value += value;
+    }
 
     const gk = a.group_id;
     byGroup[gk] = byGroup[gk] || {
@@ -308,9 +421,12 @@ function aggregate(assets, members) {
   const pnl = totalAsset - totalCost;
   const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
 
+  const sortByValue = (obj) => Object.values(obj).sort((a, b) => b.value - a.value);
+
   return {
-    kpi: { netWorth, totalAsset, totalLiability, totalCost, pnl, pnlPct },
+    kpi: { netWorth, totalAsset, totalLiability, totalCost, pnl, pnlPct, liquidAsset },
     byGroup: Object.values(byGroup).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
     byMember: Object.values(byMember).sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
+    byLiquidity: { liquid: sortByValue(liquidBuckets), illiquid: sortByValue(illiquidBuckets) },
   };
 }

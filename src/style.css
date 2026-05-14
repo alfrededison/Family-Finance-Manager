@@ -242,6 +242,16 @@ main {
 }
 .pie-legend-row.clickable { cursor: pointer; }
 .pie-legend-row.clickable:hover { background: var(--surface-2); }
+.legend-section-header {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 8px 8px 2px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.legend-section-header:not(:first-child) { margin-top: 6px; }
 .legend-dot {
   width: 12px;
   height: 12px;
