@@ -68,11 +68,9 @@ export const PROVIDERS = {
 
 
 export const SETTINGS_DEFAULTS = {
-  'market.provider.vang':    'doji',
-  'market.provider.usd':     'tygiausd',
-  'market.schedule.time':    '17:00',
-  'market.schedule.enabled': true,
-  'market.last_fetch':       null,
+  'market.provider.vang': 'doji',
+  'market.provider.usd':  'tygiausd',
+  'market.last_fetch':    null,
 };
 
 // ── Core fetch + update logic ───────────────────────────────────────────────

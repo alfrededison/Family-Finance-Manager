@@ -21,7 +21,7 @@ export async function renderSettings(view) {
 
     <div class="section">
       <h2>Giá thị trường</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Nguồn dữ liệu và lịch cập nhật giá tự động.</p>
+      <p class="muted-sm" style="margin: -8px 0 12px;">Nguồn dữ liệu giá thị trường.</p>
       <div id="market-settings"></div>
     </div>
 
@@ -116,21 +116,9 @@ async function reloadMarketSettings() {
     return `<div class="market-subtype"><h3>${escapeHtml(label)}</h3>${rows}</div>`;
   }).join('');
 
-  const schedEnabled = settings['market.schedule.enabled'] ?? true;
-  const schedTime = settings['market.schedule.time'] ?? '17:00';
-
   container.innerHTML = `
     ${providerRows}
-    <div class="toolbar" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-        <input type="checkbox" id="sched-enabled" ${schedEnabled ? 'checked' : ''} />
-        Tự động cập nhật mỗi ngày
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;">
-        Lúc <input type="time" id="sched-time" value="${escapeHtml(schedTime)}" style="width:110px;" />
-      </label>
-    </div>
-    <div class="toolbar" style="margin-top:8px;">
+    <div class="toolbar" style="margin-top:12px;">
       <button type="button" id="btn-fetch-all">↻ Làm mới tất cả</button>
     </div>
   `;
@@ -183,24 +171,6 @@ async function reloadMarketSettings() {
       }
     };
   });
-
-  // Schedule enabled toggle
-  document.getElementById('sched-enabled').onchange = async (e) => {
-    try {
-      await api.post('/settings', { key: 'market.schedule.enabled', value: e.target.checked });
-    } catch (err) {
-      toast('Lỗi: ' + err.message);
-    }
-  };
-
-  // Schedule time input
-  document.getElementById('sched-time').onchange = async (e) => {
-    try {
-      await api.post('/settings', { key: 'market.schedule.time', value: e.target.value });
-    } catch (err) {
-      toast('Lỗi: ' + err.message);
-    }
-  };
 
   // Fetch all button
   document.getElementById('btn-fetch-all').onclick = async () => {

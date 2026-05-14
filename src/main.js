@@ -93,21 +93,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Init: seed if empty, check market schedule, then render
-(async function init() {
-  try {
-    await api.post('/seed', {});
-  } catch {
-    // ignore — seed is idempotent and may fail if already populated
-  }
-  try {
-    const r = await api.post('/market-data/auto-fetch', {});
-    if (r.triggered) toast(`Đã cập nhật giá thị trường (${r.updated ?? 0} tài sản)`);
-  } catch {
-    // ignore — non-critical background task
-  }
-  router();
-})();
+router();
 
 export function toast(msg, action) {
   const el = document.getElementById('toast');
