@@ -14,12 +14,14 @@ export async function onRequestPost({ env, request }) {
     if (providerId && subtype) {
       results.push(await fetchOne(env, providerId, subtype));
     } else {
-      // Fetch all providers across all their subtypes
+      // Fetch all providers across all their subtypes in parallel
+      const tasks = [];
       for (const p of Object.values(PROVIDERS)) {
         for (const st of p.subtypes) {
-          results.push(await fetchOne(env, p.id, st));
+          tasks.push(fetchOne(env, p.id, st));
         }
       }
+      results.push(...await Promise.all(tasks));
     }
 
     const assetsUpdated = results.reduce((sum, r) => sum + (r.assetsUpdated || 0), 0);

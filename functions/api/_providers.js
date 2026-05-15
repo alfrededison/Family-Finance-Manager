@@ -58,26 +58,120 @@ async function fetchTechcombank() {
   return { price };
 }
 
+// VPS public API — batch price feed for Vietnamese stocks.
+// lastPrice is quoted in thousands VND (e.g. 60.7 → 60,700 VND).
+// Falls back to reference price (r) when lastPrice is 0 (market closed).
+async function fetchVps(tickers) {
+  if (tickers.length === 0) return { prices: {} };
+
+  const res = await fetch(
+    `https://bgapidatafeed.vps.com.vn/getliststockdata/${tickers.join(',')}`,
+    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status} from VPS`);
+  const data = await res.json();
+
+  const prices = {};
+  for (const item of data) {
+    const ticker = (item.sym || '').toUpperCase();
+    if (!ticker) continue;
+    const raw = item.lastPrice || item.r || 0;
+    const price = Math.round(Number(raw) * 1000);
+    if (price > 0) prices[ticker] = price;
+  }
+  return { prices };
+}
+
 // ── Provider registry ───────────────────────────────────────────────────────
 
 export const PROVIDERS = {
-  doji:        { id: 'doji',        name: 'DOJI (24h)',  subtypes: ['vang'], fetch: fetchDoji },
-  tygiausd:    { id: 'tygiausd',    name: 'TyGiaUSD',    subtypes: ['usd'],  fetch: fetchTyGiaUsd },
-  techcombank: { id: 'techcombank', name: 'Techcombank', subtypes: ['usd'],  fetch: fetchTechcombank },
+  doji:        { id: 'doji',        name: 'DOJI (24h)',  subtypes: ['vang'],      fetch: fetchDoji },
+  tygiausd:    { id: 'tygiausd',    name: 'TyGiaUSD',    subtypes: ['usd'],       fetch: fetchTyGiaUsd },
+  techcombank: { id: 'techcombank', name: 'Techcombank', subtypes: ['usd'],       fetch: fetchTechcombank },
+  vps:         { id: 'vps',         name: 'VPS',         subtypes: ['co-phieu'],  fetch: fetchVps,  perTicker: true },
 };
 
 
 export const SETTINGS_DEFAULTS = {
-  'market.provider.vang': 'doji',
-  'market.provider.usd':  'tygiausd',
-  'market.last_fetch':    null,
+  'market.provider.vang':      'doji',
+  'market.provider.usd':       'tygiausd',
+  'market.provider.co-phieu':  'vps',
+  'market.last_fetch':         null,
 };
 
 // ── Core fetch + update logic ───────────────────────────────────────────────
 
+// Per-ticker providers: each asset has its own ticker → fetch a map of { TICKER: price }.
+async function fetchOnePerTicker(env, provider, subtype, now) {
+  const assetRows = await env.DB.prepare(
+    "SELECT id, ticker, current_price FROM assets WHERE subtype = ? AND status = 'active' AND ticker IS NOT NULL AND ticker != ''",
+  ).bind(subtype).all();
+
+  const assets = assetRows.results || [];
+  if (assets.length === 0) {
+    return { provider: provider.id, subtype, prices: {}, assetsUpdated: 0, isDefault: true, fetched_at: now };
+  }
+
+  const tickers = [...new Set(assets.map((a) => a.ticker.toUpperCase()))];
+
+  let result;
+  try {
+    result = await provider.fetch(tickers);
+  } catch (err) {
+    return { provider: provider.id, subtype, error: err.message };
+  }
+
+  const prices = result.prices || {};
+  console.log('VPS prices:', prices);
+
+  const cacheKey = `market.cache.${subtype}.${provider.id}`;
+  await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+    .bind(cacheKey, JSON.stringify({ prices, fetched_at: now })).run();
+
+  const defaultRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?')
+    .bind(`market.provider.${subtype}`).first();
+  const defaultProviderId = defaultRow
+    ? JSON.parse(defaultRow.value)
+    : SETTINGS_DEFAULTS[`market.provider.${subtype}`];
+  const isDefault = defaultProviderId === provider.id;
+
+  let assetsUpdated = 0;
+
+  if (isDefault) {
+    const stmts = [];
+    for (const asset of assets) {
+      const price = prices[asset.ticker.toUpperCase()];
+      if (!price) continue;
+      stmts.push(
+        env.DB.prepare("UPDATE assets SET current_price = ?, updated_at = ? WHERE id = ?")
+          .bind(price, now, asset.id),
+      );
+      stmts.push(
+        env.DB.prepare(
+          'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(asset.id, price, asset.current_price, now, `market:${provider.id}`, 'edit'),
+      );
+      assetsUpdated++;
+    }
+    if (stmts.length > 0) {
+      await env.DB.batch(stmts);
+      await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+        .bind('market.last_fetch', JSON.stringify(now)).run();
+    }
+  }
+
+  return { provider: provider.id, subtype, prices, assetsUpdated, isDefault, fetched_at: now };
+}
+
 export async function fetchOne(env, providerId, subtype) {
   const provider = PROVIDERS[providerId];
   if (!provider) return { provider: providerId, subtype, error: 'unknown provider' };
+
+  const now = nowISO();
+
+  if (provider.perTicker) {
+    return fetchOnePerTicker(env, provider, subtype, now);
+  }
 
   let prices;
   try {
@@ -85,8 +179,6 @@ export async function fetchOne(env, providerId, subtype) {
   } catch (err) {
     return { provider: providerId, subtype, error: err.message };
   }
-
-  const now = nowISO();
 
   // Cache result in settings
   const cacheKey = `market.cache.${subtype}.${providerId}`;

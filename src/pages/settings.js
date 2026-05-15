@@ -2,8 +2,9 @@ import { api } from '../api.js';
 import { escapeHtml, toast, rerender, fmtVND, openModal, closeModal } from '../main.js';
 
 const MARKET_SUBTYPE_LABELS = {
-  vang: 'Vàng',
-  usd:  'USD',
+  vang:      'Vàng',
+  usd:       'USD',
+  'co-phieu': 'Cổ phiếu',
 };
 
 export async function renderSettings(view) {
@@ -125,9 +126,17 @@ async function reloadMarketSettings() {
     const defaultId = settings[`market.provider.${st}`];
     const rows = list.map((p) => {
       const cache = settings[`market.cache.${st}.${p.id}`];
-      const priceLabel = cache
-        ? `${fmtVND(cache.price)} <span class="muted-sm">${new Date(cache.fetched_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</span>`
-        : '<span class="muted-sm">—</span>';
+      let priceLabel;
+      if (!cache) {
+        priceLabel = '<span class="muted-sm">—</span>';
+      } else if (cache.prices) {
+        // Per-ticker provider: show how many tickers were fetched
+        const count = Object.keys(cache.prices).length;
+        const timeStr = new Date(cache.fetched_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+        priceLabel = `${count} mã <span class="muted-sm">${timeStr}</span>`;
+      } else {
+        priceLabel = `${fmtVND(cache.price)} <span class="muted-sm">${new Date(cache.fetched_at).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</span>`;
+      }
       const isDefault = defaultId === p.id;
       return `
         <div class="provider-row${isDefault ? ' provider-row--default' : ''}"
