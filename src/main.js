@@ -20,7 +20,7 @@ function currentRoute() {
 
 async function router() {
   const route = currentRoute();
-  document.querySelectorAll('.sidebar a').forEach((a) => {
+  document.querySelectorAll('.sidebar a, .bottom-nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
   });
   closeNav();
