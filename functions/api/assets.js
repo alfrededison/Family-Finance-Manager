@@ -74,6 +74,10 @@ export async function onRequestPost({ env, request }) {
     ).run();
 
     const id = result.meta.last_row_id;
+    await env.DB.prepare(
+      'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(id, Number(b.current_price || b.cost_price || 0), now, 'manual', 'create', b.notes || null).run();
+
     const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(id).first();
     return json(row, 201);
   } catch (err) {

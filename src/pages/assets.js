@@ -193,15 +193,33 @@ function bindRowActions(assets, members, reload) {
     const id = Number(tr.dataset.id);
     const asset = assets.find((a) => a.id === id);
     tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, members, reload);
-    tr.querySelector('[data-act="del"]').onclick = async () => {
-      if (!confirm(`Xoá tài sản "${asset.name}"?`)) return;
-      try {
-        await api.del('/assets/' + id);
-        toast('Đã xoá');
-        await reload();
-      } catch (err) {
-        toast('Lỗi: ' + err.message);
-      }
+    tr.querySelector('[data-act="del"]').onclick = () => {
+      openModal(`
+        <h3>Xoá tài sản</h3>
+        <p>Xoá "<strong>${escapeHtml(asset.name)}</strong>"?</p>
+        <div class="form-grid">
+          <label class="full">Ghi chú
+            <textarea id="del-notes" rows="2" placeholder="Lý do xoá..."></textarea>
+          </label>
+        </div>
+        <div class="modal-actions full">
+          <button type="button" class="secondary" id="del-cancel">Huỷ</button>
+          <button type="button" class="danger" id="del-confirm">Xoá</button>
+        </div>
+      `, (root) => {
+        root.querySelector('#del-cancel').onclick = closeModal;
+        root.querySelector('#del-confirm').onclick = async () => {
+          const notes = root.querySelector('#del-notes').value.trim() || null;
+          try {
+            await api.del('/assets/' + id, notes ? { notes } : undefined);
+            toast('Đã xoá');
+            closeModal();
+            await reload();
+          } catch (err) {
+            toast('Lỗi: ' + err.message);
+          }
+        };
+      });
     };
   });
 }

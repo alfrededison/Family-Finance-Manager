@@ -59,7 +59,9 @@ CREATE TABLE price_history (
   asset_id    INTEGER NOT NULL REFERENCES assets(id),
   price       REAL    NOT NULL,
   recorded_at TEXT    NOT NULL DEFAULT (datetime('now')),
-  source      TEXT    NOT NULL DEFAULT 'manual'
+  source      TEXT    NOT NULL DEFAULT 'manual',
+  type        TEXT    NOT NULL DEFAULT 'edit',
+  note        TEXT
 );
 
 CREATE INDEX idx_price_asset ON price_history(asset_id, recorded_at);

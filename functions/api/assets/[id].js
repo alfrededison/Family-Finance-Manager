@@ -31,11 +31,11 @@ export async function onRequestPut({ env, request, params }) {
 
     await env.DB.prepare(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
 
-    // Track price history when current_price changes
+    // Track history when current_price changes
     if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
       await env.DB.prepare(
-        'INSERT INTO price_history (asset_id, price, recorded_at, source) VALUES (?, ?, ?, ?)'
-      ).bind(id, Number(b.current_price), nowISO(), b._source || 'manual').run();
+        'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(id, Number(b.current_price), nowISO(), b._source || 'manual', 'edit', b.notes || null).run();
     }
 
     const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(id).first();
@@ -46,10 +46,18 @@ export async function onRequestPut({ env, request, params }) {
 }
 
 // DELETE /api/assets/:id — soft delete
-export async function onRequestDelete({ env, params }) {
+export async function onRequestDelete({ env, params, request }) {
   try {
     const id = Number(params.id);
     if (!id) return error('invalid id', 400);
+
+    const b = await readBody(request);
+    const asset = await env.DB.prepare('SELECT current_price FROM assets WHERE id = ?').bind(id).first();
+    if (asset) {
+      await env.DB.prepare(
+        'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(id, asset.current_price, nowISO(), 'manual', 'delete', b?.notes || 'Đã xoá').run();
+    }
 
     await env.DB.prepare("UPDATE assets SET status = 'deleted', updated_at = ? WHERE id = ?")
       .bind(nowISO(), id).run();
