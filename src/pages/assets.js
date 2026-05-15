@@ -209,6 +209,9 @@ function bindRowActions(assets, members, reload) {
       `, (root) => {
         root.querySelector('#del-cancel').onclick = closeModal;
         root.querySelector('#del-confirm').onclick = async () => {
+          const delBtn = root.querySelector('#del-confirm');
+          delBtn.disabled = true;
+          delBtn.classList.add('btn-loading');
           const notes = root.querySelector('#del-notes').value.trim() || null;
           try {
             await api.del('/assets/' + id, notes ? { notes } : undefined);
@@ -216,6 +219,8 @@ function bindRowActions(assets, members, reload) {
             closeModal();
             await reload();
           } catch (err) {
+            delBtn.disabled = false;
+            delBtn.classList.remove('btn-loading');
             toast('Lỗi: ' + err.message);
           }
         };
@@ -590,6 +595,9 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
 
   form.onsubmit = async (e) => {
     e.preventDefault();
+    const submitBtn = form.querySelector('[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.classList.add('btn-loading');
     const fd = new FormData(form);
     const body = { group_id: groupId };
     for (const [k, v] of fd.entries()) body[k] = v === '' ? null : v;
@@ -610,6 +618,8 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
       closeModal();
       await reload();
     } catch (err) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('btn-loading');
       toast('Lỗi: ' + err.message);
     }
   };

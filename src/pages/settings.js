@@ -79,6 +79,9 @@ export async function renderSettings(view) {
     const input = document.getElementById('platform-name');
     const name = input.value.trim();
     if (!name) return;
+    const submitBtn = e.target.querySelector('[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.classList.add('btn-loading');
     try {
       await api.post('/platforms', { name });
       input.value = '';
@@ -86,6 +89,9 @@ export async function renderSettings(view) {
       await reloadPlatforms();
     } catch (err) {
       toast('Lỗi: ' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('btn-loading');
     }
   };
 
@@ -227,12 +233,15 @@ async function reloadPlatforms() {
   `).join('');
   list.querySelectorAll('.chip').forEach((el) => {
     const id = Number(el.dataset.id);
-    el.querySelector('.chip-x').onclick = async () => {
+    const chipBtn = el.querySelector('.chip-x');
+    chipBtn.onclick = async () => {
       if (!confirm('Xoá nền tảng này?')) return;
+      chipBtn.disabled = true;
       try {
         await api.del('/platforms?id=' + id);
         await reloadPlatforms();
       } catch (err) {
+        chipBtn.disabled = false;
         toast('Lỗi: ' + err.message);
       }
     };
@@ -328,6 +337,9 @@ function openMemberModal() {
     root.querySelector('#cancel').onclick = closeModal;
     root.querySelector('#member-form').onsubmit = async (e) => {
       e.preventDefault();
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('btn-loading');
       const fd = new FormData(e.target);
       try {
         await api.post('/members', Object.fromEntries(fd.entries()));
@@ -335,6 +347,8 @@ function openMemberModal() {
         closeModal();
         await reloadMembers();
       } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('btn-loading');
         toast('Lỗi: ' + err.message);
       }
     };

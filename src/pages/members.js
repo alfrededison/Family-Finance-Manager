@@ -51,6 +51,9 @@ function openMemberModal() {
     root.querySelector('#cancel').onclick = closeModal;
     root.querySelector('#member-form').onsubmit = async (e) => {
       e.preventDefault();
+      const submitBtn = e.target.querySelector('[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.classList.add('btn-loading');
       const fd = new FormData(e.target);
       const body = Object.fromEntries(fd.entries());
       try {
@@ -59,6 +62,8 @@ function openMemberModal() {
         closeModal();
         rerender();
       } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('btn-loading');
         toast('Lỗi: ' + err.message);
       }
     };
