@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { escapeHtml, toast, rerender, fmtVND } from '../main.js';
+import { escapeHtml, toast, rerender, fmtVND, openModal, closeModal } from '../main.js';
 
 const MARKET_SUBTYPE_LABELS = {
   vang: 'Vàng',
@@ -9,6 +9,16 @@ const MARKET_SUBTYPE_LABELS = {
 export async function renderSettings(view) {
   view.innerHTML = `
     <div class="page-header"><h1>⚙️ Cài đặt</h1></div>
+
+    <div class="section">
+      <h2>👥 Thành viên</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">Quản lý thành viên dùng để gắn tài sản.</p>
+      <div id="member-list"></div>
+      <div class="toolbar" style="margin-top:12px;">
+        <button type="button" id="btn-new-member">+ Thêm thành viên</button>
+      </div>
+    </div>
+
     <div class="section">
       <h2>Nền tảng tiền gửi</h2>
       <p class="muted-sm" style="margin: -8px 0 12px;">Danh sách dùng cho form Tiền gửi. Có thể thêm hoặc xoá tuỳ ý.</p>
@@ -58,8 +68,11 @@ export async function renderSettings(view) {
     </div>
   `;
 
+  await reloadMembers();
   await reloadPlatforms();
   await reloadMarketSettings();
+
+  document.getElementById('btn-new-member').onclick = () => openMemberModal();
 
   document.getElementById('platform-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -271,6 +284,61 @@ async function onForceReload() {
   } catch {
     window.location.reload();
   }
+}
+
+async function reloadMembers() {
+  const members = await api.get('/members');
+  const list = document.getElementById('member-list');
+  if (!list) return;
+  if (!members.length) {
+    list.innerHTML = '<div class="empty">Chưa có thành viên</div>';
+    return;
+  }
+  list.innerHTML = `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Tên</th><th>Màu</th></tr></thead>
+      <tbody>
+        ${members.map((m) => `
+          <tr>
+            <td><span class="member-chip" style="background:${escapeHtml(m.color)}">${escapeHtml(m.name)}</span></td>
+            <td><code>${escapeHtml(m.color)}</code></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table></div>
+  `;
+}
+
+function openMemberModal() {
+  openModal(`
+    <h3>Thêm thành viên</h3>
+    <form id="member-form" class="form-grid">
+      <label class="full">Tên
+        <input name="name" required />
+      </label>
+      <label class="full">Màu
+        <input name="color" type="color" value="#3b82f6" />
+      </label>
+      <div class="modal-actions full">
+        <button type="button" class="secondary" id="cancel">Huỷ</button>
+        <button type="submit">Tạo</button>
+      </div>
+    </form>
+  `, (root) => {
+    root.querySelector('#cancel').onclick = closeModal;
+    root.querySelector('#member-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await api.post('/members', Object.fromEntries(fd.entries()));
+        toast('Đã thêm');
+        closeModal();
+        await reloadMembers();
+      } catch (err) {
+        toast('Lỗi: ' + err.message);
+      }
+    };
+  });
 }
 
 async function onImport(e) {
