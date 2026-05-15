@@ -4,7 +4,6 @@ const TABLES = [
   'members',
   'platforms',
   'assets',
-  'transactions',
   'price_history',
   'settings',
 ];

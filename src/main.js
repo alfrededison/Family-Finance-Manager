@@ -1,6 +1,6 @@
 import { renderDashboard } from './pages/dashboard.js';
 import { renderAssets } from './pages/assets.js';
-import { renderTransactions } from './pages/transactions.js';
+import { renderPriceHistory } from './pages/price-history.js';
 import { renderMembers } from './pages/members.js';
 import { renderSettings } from './pages/settings.js';
 import { api } from './api.js';
@@ -8,7 +8,7 @@ import { api } from './api.js';
 const routes = {
   dashboard: renderDashboard,
   assets: renderAssets,
-  transactions: renderTransactions,
+  'price-history': renderPriceHistory,
   members: renderMembers,
   settings: renderSettings,
 };

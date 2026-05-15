@@ -11,17 +11,12 @@ const COLUMNS = {
     'status', 'created_at', 'updated_at',
   ],
   settings: ['key', 'value'],
-  transactions: [
-    'id', 'date', 'type', 'asset_id', 'member_id', 'qty', 'unit_price',
-    'fee', 'tax', 'total', 'notes', 'created_at',
-  ],
   price_history: ['id', 'asset_id', 'price', 'recorded_at', 'source'],
 };
 
 // Delete order (child → parent) to satisfy FK constraints.
 const DELETE_ORDER = [
   'price_history',
-  'transactions',
   'assets',
   'platforms',
   'members',
@@ -117,24 +112,6 @@ async function runMerge(env, data) {
     ]);
     assetMap[r.id] = newId;
     stats.assets++;
-  }
-
-  // transactions
-  stats.transactions = 0;
-  for (const r of (data.transactions || [])) {
-    const assetId = assetMap[r.asset_id];
-    if (assetId == null) continue;  // skip dangling refs
-    await env.DB.prepare(`
-      INSERT INTO transactions (date, type, asset_id, member_id, qty, unit_price, fee, tax, total, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      r.date, r.type, assetId,
-      r.member_id != null ? (memberMap[r.member_id] ?? null) : null,
-      Number(r.qty || 0), Number(r.unit_price || 0),
-      Number(r.fee || 0), Number(r.tax || 0), Number(r.total || 0),
-      r.notes || null, r.created_at || nowISO(),
-    ).run();
-    stats.transactions++;
   }
 
   // price_history

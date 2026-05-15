@@ -37,12 +37,6 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
-      "name": "Thêm giao dịch",
-      "short_name": "Giao dịch",
-      "url": "/#/transactions?new=1",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
-    },
-    {
       "name": "Thêm tài sản",
       "short_name": "Thêm tài sản",
       "url": "/#/assets?new=1",

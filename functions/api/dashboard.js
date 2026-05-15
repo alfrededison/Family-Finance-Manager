@@ -4,7 +4,7 @@ import { json, error, computeAssetMetrics } from '../_utils.js';
 // are computed client-side using the hard-coded group list in src/data/groups.js).
 export async function onRequestGet({ env }) {
   try {
-    const [membersRes, assetsRes, txRes] = await Promise.all([
+    const [membersRes, assetsRes] = await Promise.all([
       env.DB.prepare('SELECT * FROM members ORDER BY id').all(),
       env.DB.prepare(`
         SELECT a.*, m.name AS member_name, m.color AS member_color
@@ -13,21 +13,12 @@ export async function onRequestGet({ env }) {
         WHERE a.status = 'active'
         ORDER BY a.id DESC
       `).all(),
-      env.DB.prepare(`
-        SELECT t.*, a.name AS asset_name, m.name AS member_name
-        FROM transactions t
-        JOIN assets a ON a.id = t.asset_id
-        LEFT JOIN members m ON m.id = t.member_id
-        ORDER BY t.date DESC, t.id DESC
-        LIMIT 20
-      `).all(),
     ]);
 
     const members = membersRes.results || [];
     const assets = (assetsRes.results || []).map((a) => ({ ...a, ...computeAssetMetrics(a) }));
-    const transactions = txRes.results || [];
 
-    return json({ members, assets, transactions });
+    return json({ members, assets });
   } catch (err) {
     return error(err.message, 500);
   }

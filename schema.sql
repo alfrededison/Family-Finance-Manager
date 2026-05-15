@@ -3,7 +3,6 @@
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS price_history;
-DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
@@ -54,29 +53,6 @@ CREATE TABLE assets (
 CREATE INDEX idx_assets_group   ON assets(group_id);
 CREATE INDEX idx_assets_member  ON assets(member_id);
 CREATE INDEX idx_assets_status  ON assets(status);
-
-CREATE TABLE transactions (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  date       TEXT    NOT NULL,
-  -- Type is a free-form slug (per-group flows). See src/pages/transactions.js
-  -- for the canonical list: buy, sell, collect_principal, lend_more,
-  -- collect_interest, settle_out, pay_interest, pay_principal, borrow_more,
-  -- settle_in, adjust, transfer.
-  type       TEXT    NOT NULL,
-  asset_id   INTEGER NOT NULL REFERENCES assets(id),
-  member_id  INTEGER REFERENCES members(id),
-  qty        REAL    NOT NULL DEFAULT 0,
-  unit_price REAL    NOT NULL DEFAULT 0,
-  fee        REAL    NOT NULL DEFAULT 0,
-  tax        REAL    NOT NULL DEFAULT 0,
-  total      REAL    NOT NULL DEFAULT 0,
-  notes      TEXT,
-  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX idx_tx_asset  ON transactions(asset_id);
-CREATE INDEX idx_tx_member ON transactions(member_id);
-CREATE INDEX idx_tx_date   ON transactions(date);
 
 CREATE TABLE price_history (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
