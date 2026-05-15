@@ -18,6 +18,7 @@ export async function renderAssets(view) {
   const initGroup     = urlParams.get('group')      || '';
   const initMember    = urlParams.get('member')     || '';
   const initAvailable = urlParams.get('available')  || '';
+  const initSubtype   = urlParams.get('subtype')    || '';
 
   const applyAvailableFilter = (list, av) => {
     if (av === '1') return list.filter((a) => isLiquid(a));
@@ -38,7 +39,7 @@ export async function renderAssets(view) {
     api.get('/members'),
   ]);
 
-  const allAssets = rawAll;
+  const allAssets = initSubtype ? rawAll.filter((a) => a.subtype === initSubtype) : rawAll;
   const assets = applyAvailableFilter(allAssets, initAvailable);
 
   view.innerHTML = `

@@ -242,6 +242,8 @@ main {
 }
 .pie-legend-row.clickable { cursor: pointer; }
 .pie-legend-row.clickable:hover { background: var(--surface-2); }
+.pie-slice-clickable { cursor: pointer; }
+.pie-slice-clickable:hover path, .pie-slice-clickable:hover circle { opacity: 0.85; }
 .legend-section-header {
   font-size: 12px;
   font-weight: 700;

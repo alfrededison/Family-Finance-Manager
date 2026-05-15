@@ -94,6 +94,9 @@ function wireEvents() {
   _viewEl.querySelectorAll('[data-back="member"]').forEach((el) => {
     el.addEventListener('click', () => { _selectedMember = null; paint(); });
   });
+  _viewEl.querySelectorAll('[data-nav]').forEach((el) => {
+    el.addEventListener('click', () => { window.location.hash = el.dataset.nav; });
+  });
 }
 
 // ─── Chart blocks ───────────────────────────────────────────────────────────
@@ -105,6 +108,7 @@ function renderGroupChart(byGroup) {
     value: Math.abs(g.value),
     color: GROUP_COLORS[g.id] || PALETTE[0],
     count: g.count,
+    navUrl: `#/assets?group=${g.id}`,
   }));
   return `
     <h2>Phân bổ theo nhóm</h2>
@@ -136,6 +140,7 @@ function renderGroupDrilldown(assets, groupId) {
     value: s.value,
     color: PALETTE[i % PALETTE.length],
     count: s.count,
+    navUrl: s.id === '__none__' ? `#/assets?group=${groupId}` : `#/assets?group=${groupId}&subtype=${s.id}`,
   }));
 
   return `
@@ -154,6 +159,7 @@ function renderMemberChart(byMember) {
     value: Math.abs(m.value),
     color: m.color || PALETTE[0],
     count: m.count,
+    navUrl: `#/assets?member=${m.id}`,
   }));
   return `
     <h2>Phân bổ theo thành viên</h2>
@@ -185,6 +191,7 @@ function renderMemberDrilldown(assets, members, memberId) {
     value: s.value,
     color: GROUP_COLORS[s.id] || PALETTE[0],
     count: s.count,
+    navUrl: `#/assets?member=${memberId}&group=${s.id}`,
   }));
 
   return `
@@ -207,16 +214,19 @@ function renderLiquidityChart(byLiquidity) {
   }
 
   const topSlices = [
-    { key: 'liquid', name: 'Khả dụng', value: liquidTotal, color: '#10b981' },
-    { key: 'illiquid', name: 'Không khả dụng', value: illiquidTotal, color: '#94a3b8' },
+    { key: 'liquid', name: 'Khả dụng', value: liquidTotal, color: '#10b981', navUrl: '#/assets?available=1' },
+    { key: 'illiquid', name: 'Không khả dụng', value: illiquidTotal, color: '#94a3b8', navUrl: '#/assets?available=0' },
   ].filter((s) => s.value > 0);
 
-  const makeLegendRows = (items, headerLabel, headerColor) => {
+  const makeLegendRows = (items, headerLabel, headerColor, availableVal) => {
     if (items.length === 0) return '';
     const rows = items.map((item) => {
       const pct = (item.value / total) * 100;
+      const navUrl = item.groupId ? `#/assets?available=${availableVal}&group=${item.groupId}` : '';
+      const navAttr = navUrl ? `data-nav="${navUrl}"` : '';
+      const cls = navUrl ? 'pie-legend-row clickable' : 'pie-legend-row';
       return `
-        <div class="pie-legend-row">
+        <div class="${cls}" ${navAttr}>
           <span class="legend-dot" style="background:${item.color}"></span>
           <span class="legend-name">${escapeHtml(item.name)}</span>
           <span class="legend-value">${fmtVND(item.value)}</span>
@@ -251,11 +261,11 @@ function renderLiquidityChart(byLiquidity) {
       const lx = cx + r * 0.65 * Math.sin(midAngle), ly = cy - r * 0.65 * Math.cos(midAngle);
       label = `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" class="pie-slice-label" text-anchor="middle" dominant-baseline="central">${pct.toFixed(1)}%</text>`;
     }
-    return `<g><title>${escapeHtml(s.name)}: ${fmtVND(s.value)} (${pct.toFixed(1)}%)</title>${shape}${label}</g>`;
+    return `<g data-nav="${escapeHtml(s.navUrl)}" class="pie-slice-clickable"><title>${escapeHtml(s.name)}: ${fmtVND(s.value)} (${pct.toFixed(1)}%)</title>${shape}${label}</g>`;
   }).join('');
 
-  const legendHtml = makeLegendRows(liquid, '✅ Khả dụng', '#10b981')
-    + makeLegendRows(illiquid, '🔒 Không khả dụng', '#94a3b8');
+  const legendHtml = makeLegendRows(liquid, '✅ Khả dụng', '#10b981', 1)
+    + makeLegendRows(illiquid, '🔒 Không khả dụng', '#94a3b8', 0);
 
   return `
     <h2>Khả dụng / Không khả dụng</h2>
@@ -303,15 +313,18 @@ function renderPie(slices, clickGroup, emptyText) {
       const ly = cy - labelR * Math.cos(midAngle);
       label = `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" class="pie-slice-label" text-anchor="middle" dominant-baseline="central">${pct.toFixed(1)}%</text>`;
     }
-    return `<g><title>${escapeHtml(s.name)}: ${fmtVND(s.value)} (${pct.toFixed(1)}%)</title>${shape}${label}</g>`;
+    const sliceAttrs = clickGroup
+      ? `data-pie-click="${clickGroup}" data-key="${escapeHtml(s.key)}" class="pie-slice-clickable"`
+      : '';
+    return `<g ${sliceAttrs}><title>${escapeHtml(s.name)}: ${fmtVND(s.value)} (${pct.toFixed(1)}%)</title>${shape}${label}</g>`;
   }).join('');
 
   const legend = slices.map((s) => {
     const pct = (s.value / total) * 100;
-    const clickable = clickGroup ? `data-pie-click="${clickGroup}" data-key="${escapeHtml(s.key)}"` : '';
-    const cls = clickGroup ? 'pie-legend-row clickable' : 'pie-legend-row';
+    const navAttr = s.navUrl ? `data-nav="${escapeHtml(s.navUrl)}"` : '';
+    const cls = s.navUrl ? 'pie-legend-row clickable' : 'pie-legend-row';
     return `
-      <div class="${cls}" ${clickable}>
+      <div class="${cls}" ${navAttr}>
         <span class="legend-dot" style="background:${s.color}"></span>
         <span class="legend-name">${escapeHtml(s.name)}${s.count != null ? ` <span class="badge">${s.count}</span>` : ''}</span>
         <span class="legend-value">${fmtVND(s.value)}</span>
@@ -362,7 +375,7 @@ function aggregate(assets, members) {
         ? `${g?.icon || ''} ${g?.name} — ${subtype.name}`
         : `${g?.icon || ''} ${g?.name || a.group_id}`;
       const buckets = liquid ? liquidBuckets : illiquidBuckets;
-      buckets[bucketKey] = buckets[bucketKey] || { name: bucketName, value: 0, color: GROUP_COLORS[a.group_id] || PALETTE[0] };
+      buckets[bucketKey] = buckets[bucketKey] || { name: bucketName, value: 0, color: GROUP_COLORS[a.group_id] || PALETTE[0], groupId: a.group_id };
       buckets[bucketKey].value += value;
     }
 
