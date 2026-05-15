@@ -19,7 +19,7 @@ export async function onRequestGet({ env, request }) {
 
     const [dataRes, countRes] = await Promise.all([
       env.DB.prepare(`
-        SELECT ph.id, ph.asset_id, ph.price, ph.recorded_at, ph.source, ph.type, ph.note,
+        SELECT ph.id, ph.asset_id, ph.price, ph.old_price, ph.recorded_at, ph.source, ph.type, ph.note,
                a.name AS asset_name, a.group_id AS asset_group
         FROM price_history ph
         JOIN assets a ON a.id = ph.asset_id

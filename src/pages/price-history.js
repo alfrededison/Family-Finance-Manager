@@ -138,9 +138,9 @@ function bindAssetDropdown(assets, onChange) {
 
 function fmtType(type) {
   if (type === 'create') return '<span class="badge pos">Tạo mới</span>';
-  if (type === 'delete') return '<span class="badge danger">Xoá</span>';
-  if (type === 'edit')   return '<span class="badge neutral">Cập nhật</span>';
-  return `<span class="badge neutral">${escapeHtml(type || '')}</span>`;
+  if (type === 'delete') return '<span class="badge neg">Xoá</span>';
+  if (type === 'edit')   return '<span class="badge">Cập nhật</span>';
+  return `<span class="badge">${escapeHtml(type || '')}</span>`;
 }
 
 function fmtSource(source) {
@@ -155,6 +155,13 @@ function fmtSource(source) {
 function fmtDatetime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function fmtPrice(r) {
+  if (r.type === 'edit' && r.old_price != null) {
+    return `<span class="muted-sm">${fmtVND(r.old_price)}</span> → ${fmtVND(r.price)}`;
+  }
+  return fmtVND(r.price);
 }
 
 function renderTable(rows) {
@@ -175,7 +182,7 @@ function renderTable(rows) {
         ${rows.map((r) => `
           <tr>
             <td>${escapeHtml(r.asset_name)}</td>
-            <td class="num">${fmtVND(r.price)}</td>
+            <td class="num">${fmtPrice(r)}</td>
             <td>${fmtType(r.type)}</td>
             <td>${fmtSource(r.source)}</td>
             <td class="muted-sm">${escapeHtml(r.note || '')}</td>

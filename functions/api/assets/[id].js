@@ -29,13 +29,20 @@ export async function onRequestPut({ env, request, params }) {
     vals.push(nowISO());
     vals.push(id);
 
+    // Read old price before update so we can store it in history
+    let oldPrice = null;
+    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
+      const prev = await env.DB.prepare('SELECT current_price FROM assets WHERE id = ?').bind(id).first();
+      oldPrice = prev?.current_price ?? null;
+    }
+
     await env.DB.prepare(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run();
 
     // Track history when current_price changes
     if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
       await env.DB.prepare(
-        'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(id, Number(b.current_price), nowISO(), b._source || 'manual', 'edit', b.notes || null).run();
+        'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(id, Number(b.current_price), oldPrice, nowISO(), b._source || 'manual', 'edit', b.notes || null).run();
     }
 
     const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(id).first();

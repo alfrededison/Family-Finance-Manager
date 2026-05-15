@@ -104,19 +104,22 @@ export async function fetchOne(env, providerId, subtype) {
   let assetsUpdated = 0;
 
   if (isDefault) {
+    // Read old prices before update so they can be stored in history
+    const assetRows = await env.DB.prepare(
+      "SELECT id, current_price FROM assets WHERE subtype = ? AND status = 'active'",
+    ).bind(subtype).all();
+
     const updateRes = await env.DB.prepare(
       "UPDATE assets SET current_price = ?, updated_at = ? WHERE subtype = ? AND status = 'active'",
     ).bind(prices.price, now, subtype).run();
     assetsUpdated = updateRes.meta?.changes ?? 0;
 
     if (assetsUpdated > 0) {
-      const assetRows = await env.DB.prepare(
-        "SELECT id FROM assets WHERE subtype = ? AND status = 'active'",
-      ).bind(subtype).all();
       const source = `market:${providerId}`;
       const stmts = (assetRows.results || []).map((a) =>
-        env.DB.prepare('INSERT INTO price_history (asset_id, price, recorded_at, source) VALUES (?, ?, ?, ?)')
-          .bind(a.id, prices.price, now, source),
+        env.DB.prepare(
+          'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(a.id, prices.price, a.current_price, now, source, 'edit'),
       );
       if (stmts.length > 0) await env.DB.batch(stmts);
 

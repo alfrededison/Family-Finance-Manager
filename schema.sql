@@ -58,6 +58,7 @@ CREATE TABLE price_history (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   asset_id    INTEGER NOT NULL REFERENCES assets(id),
   price       REAL    NOT NULL,
+  old_price   REAL,
   recorded_at TEXT    NOT NULL DEFAULT (datetime('now')),
   source      TEXT    NOT NULL DEFAULT 'manual',
   type        TEXT    NOT NULL DEFAULT 'edit',
