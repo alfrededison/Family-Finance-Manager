@@ -48,6 +48,14 @@ export async function renderSettings(view) {
         Chế độ <b>Merge</b> gán ID mới và nối tiếp dữ liệu cũ.
       </p>
     </div>
+
+    <div class="section">
+      <h2>Ứng dụng</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">Kiểm tra và áp dụng phiên bản mới nhất của ứng dụng.</p>
+      <div class="toolbar">
+        <button type="button" id="btn-force-reload">↺ Tải phiên bản mới nhất</button>
+      </div>
+    </div>
   `;
 
   await reloadPlatforms();
@@ -68,6 +76,7 @@ export async function renderSettings(view) {
     }
   };
 
+  document.getElementById('btn-force-reload').onclick = onForceReload;
   document.getElementById('export-btn').onclick = onExport;
   document.getElementById('import-form').onsubmit = onImport;
 }
@@ -233,6 +242,34 @@ async function onExport() {
     toast('Đã xuất file');
   } catch (err) {
     toast('Lỗi: ' + err.message);
+  }
+}
+
+async function onForceReload() {
+  const btn = document.getElementById('btn-force-reload');
+  btn.disabled = true;
+  btn.textContent = '↺ Đang kiểm tra...';
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            window.location.reload();
+          }, { once: true });
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          return;
+        }
+      }
+    }
+    // No new SW — clear caches and hard reload
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    window.location.reload();
+  } catch {
+    window.location.reload();
   }
 }
 
