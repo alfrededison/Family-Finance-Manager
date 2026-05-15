@@ -3,7 +3,7 @@ import { fmtVND, fmtPct, escapeHtml, openModal, closeModal, toast, rerender, bin
 import { bankSelectHTML, bindBankSelect } from '../components/bank-select.js';
 import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
-import { ASSET_GROUPS, findGroup, enrichAsset } from '../data/groups.js';
+import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid } from '../data/groups.js';
 
 // Asset fields that hold VND amounts — tagged with data-money so they get
 // auto-formatted on input and parsed back to plain integers on submit.
@@ -12,11 +12,34 @@ const MONEY_FIELDS = ['cost_price', 'current_price'];
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
 
 export async function renderAssets(view) {
-  const [rawAssets, members] = await Promise.all([
-    api.get('/assets'),
+  const hashQuery = window.location.hash.split('?')[1] || '';
+  const urlParams = new URLSearchParams(hashQuery);
+  const initQ         = urlParams.get('q')         || '';
+  const initGroup     = urlParams.get('group')      || '';
+  const initMember    = urlParams.get('member')     || '';
+  const initAvailable = urlParams.get('available')  || '';
+
+  const applyAvailableFilter = (list, av) => {
+    if (av === '1') return list.filter((a) => isLiquid(a));
+    if (av === '0') return list.filter((a) => !isLiquid(a));
+    return list;
+  };
+
+  const fetchAssets = async (q, group, member) => {
+    const p = new URLSearchParams();
+    if (q)      p.set('q', q);
+    if (group)  p.set('group', group);
+    if (member) p.set('member', member);
+    return (await api.get('/assets?' + p.toString())).map(enrichAsset);
+  };
+
+  const [rawAll, members] = await Promise.all([
+    fetchAssets(initQ, initGroup, initMember),
     api.get('/members'),
   ]);
-  const assets = rawAssets.map(enrichAsset);
+
+  const allAssets = rawAll;
+  const assets = applyAvailableFilter(allAssets, initAvailable);
 
   view.innerHTML = `
     <div class="page-header">
@@ -26,14 +49,19 @@ export async function renderAssets(view) {
 
     <div class="section">
       <div class="toolbar">
-        <input id="f-q" placeholder="Tìm kiếm theo tên..." style="flex:1; min-width:200px;" />
+        <input id="f-q" placeholder="Tìm kiếm theo tên..." value="${escapeHtml(initQ)}" style="flex:1; min-width:200px;" />
         <select id="f-group">
           <option value="">Tất cả nhóm</option>
-          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
         </select>
         <select id="f-member">
           <option value="">Tất cả thành viên</option>
-          ${members.map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}
+          ${members.map((m) => `<option value="${m.id}" ${String(m.id) === initMember ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+        </select>
+        <select id="f-available">
+          <option value=""  ${initAvailable === ''  ? 'selected' : ''}>Tất cả</option>
+          <option value="1" ${initAvailable === '1' ? 'selected' : ''}>Khả dụng</option>
+          <option value="0" ${initAvailable === '0' ? 'selected' : ''}>Chưa khả dụng</option>
         </select>
       </div>
 
@@ -42,16 +70,32 @@ export async function renderAssets(view) {
   `;
 
   let filterTimer;
+  let cachedAll = allAssets;
   let currentAssets = assets;
+
+  const syncURL = () => {
+    const q         = document.getElementById('f-q').value;
+    const group     = document.getElementById('f-group').value;
+    const member    = document.getElementById('f-member').value;
+    const available = document.getElementById('f-available').value;
+    const p = new URLSearchParams();
+    if (q)         p.set('q', q);
+    if (group)     p.set('group', group);
+    if (member)    p.set('member', member);
+    if (available) p.set('available', available);
+    const qs = p.toString();
+    history.replaceState(null, '', qs ? `#/assets?${qs}` : '#/assets');
+  };
+
   const reload = async () => {
-    const q = document.getElementById('f-q').value;
-    const group = document.getElementById('f-group').value;
+    const q      = document.getElementById('f-q').value;
+    const group  = document.getElementById('f-group').value;
     const member = document.getElementById('f-member').value;
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (group) params.set('group', group);
-    if (member) params.set('member', member);
-    const filtered = (await api.get('/assets?' + params.toString())).map(enrichAsset);
+    const available = document.getElementById('f-available').value;
+    syncURL();
+    const fetched = await fetchAssets(q, group, member);
+    cachedAll = fetched;
+    const filtered = applyAvailableFilter(fetched, available);
     currentAssets = filtered;
     document.getElementById('asset-list').innerHTML = renderTable(filtered);
     bindRowActions(filtered, members, reload);
@@ -60,8 +104,7 @@ export async function renderAssets(view) {
   document.getElementById('btn-new').onclick = () => openAssetModal(null, members, reload);
 
   // PWA shortcut: /#/assets?new=1 opens the new-asset modal
-  const query = window.location.hash.split('?')[1] || '';
-  if (new URLSearchParams(query).get('new') === '1') {
+  if (urlParams.get('new') === '1') {
     history.replaceState(null, '', '#/assets');
     openAssetModal(null, members, reload);
   }
@@ -72,6 +115,14 @@ export async function renderAssets(view) {
   };
   document.getElementById('f-group').onchange = reload;
   document.getElementById('f-member').onchange = reload;
+  document.getElementById('f-available').onchange = () => {
+    syncURL();
+    const v = document.getElementById('f-available').value;
+    const filtered = applyAvailableFilter(cachedAll, v);
+    currentAssets = filtered;
+    document.getElementById('asset-list').innerHTML = renderTable(filtered);
+    bindRowActions(filtered, members, reload);
+  };
 
   bindRowActions(currentAssets, members, reload);
 }
@@ -88,6 +139,7 @@ function renderTable(assets) {
           <th class="num">SL / Đơn vị</th>
           <th class="num">Giá trị</th>
           <th class="num">Lãi/Lỗ</th>
+          <th>Khả dụng</th>
           <th></th>
         </tr>
       </thead>
@@ -108,6 +160,10 @@ function renderTable(assets) {
             <td class="num ${a.pnl == null ? '' : (a.pnl >= 0 ? 'pos' : 'neg')}">
               ${fmtVND(a.pnl)}<br/><small>${fmtPct(a.pnlPct)}</small>
             </td>
+            <td>${isLiquid(a)
+              ? '<span class="badge pos">Khả dụng</span>'
+              : '<span class="badge warn">Chưa khả dụng</span>'
+            }</td>
             <td>
               <button class="small secondary" data-act="edit">Sửa</button>
               <button class="small danger" data-act="del">Xoá</button>

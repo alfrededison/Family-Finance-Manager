@@ -81,6 +81,31 @@ export function findSubtype(groupId, subtypeId) {
   return g.subtypes.find((s) => s.id === subtypeId) || null;
 }
 
+// Always illiquid regardless of term.
+const ALWAYS_ILLIQUID = new Set([
+  'tich-tru/bds',
+  'cho-vay/cho-vay-lau-dai',
+]);
+
+// Illiquid when maturity_date is more than 1 month away; liquid otherwise.
+const MATURITY_ILLIQUID = new Set([
+  'tien-gui/tg-co-dinh',
+  'bank/so-tiet-kiem',
+]);
+
+export function isLiquid(a) {
+  const g = BY_ID[a.group_id];
+  if (!g || g.type === 'Liability') return false;
+  const key = `${a.group_id}/${a.subtype}`;
+  if (ALWAYS_ILLIQUID.has(key)) return false;
+  if (MATURITY_ILLIQUID.has(key)) {
+    if (!a.maturity_date) return true;
+    const daysLeft = (new Date(a.maturity_date) - Date.now()) / 86_400_000;
+    return daysLeft <= 30;
+  }
+  return true;
+}
+
 // Adds group_name/icon/type and a resolved subtype_name onto an asset row.
 export function enrichAsset(a) {
   const g = BY_ID[a.group_id];

@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { fmtVND, fmtPct, escapeHtml } from '../main.js';
-import { findGroup, findSubtype } from '../data/groups.js';
+import { findGroup, findSubtype, isLiquid } from '../data/groups.js';
 
 // Stable per-group colors so slices keep the same color across renders.
 const GROUP_COLORS = {
@@ -332,31 +332,6 @@ function renderPie(slices, clickGroup, emptyText) {
 
 // Computes KPIs + byGroup/byMember breakdowns from raw enriched-by-backend
 // asset rows. Group metadata (name/icon/type) comes from hard-coded list.
-// Always illiquid regardless of term.
-const ALWAYS_ILLIQUID = new Set([
-  'tich-tru/bds',
-  'cho-vay/cho-vay-lau-dai',
-]);
-
-// Illiquid when maturity_date is more than 1 month away; liquid otherwise.
-const MATURITY_ILLIQUID = new Set([
-  'tien-gui/tg-co-dinh',
-  'bank/so-tiet-kiem',
-]);
-
-function isLiquid(a) {
-  const g = findGroup(a.group_id);
-  if (!g || g.type === 'Liability') return false;
-  const key = `${a.group_id}/${a.subtype}`;
-  if (ALWAYS_ILLIQUID.has(key)) return false;
-  if (MATURITY_ILLIQUID.has(key)) {
-    if (!a.maturity_date) return true;
-    const daysLeft = (new Date(a.maturity_date) - Date.now()) / 86_400_000;
-    return daysLeft <= 30;
-  }
-  return true;
-}
-
 function aggregate(assets, members) {
   const memberById = Object.fromEntries((members || []).map((m) => [m.id, m]));
 
