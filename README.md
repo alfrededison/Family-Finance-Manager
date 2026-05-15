@@ -8,8 +8,7 @@ Vietnamese personal finance tracker on Cloudflare Pages + D1.
 npm install
 
 # 1. Create the D1 database
-npx wrangler d1 create finance-db
-# Copy the printed `database_id` into wrangler.toml
+npm run setup
 
 # 2. Apply schema (remote)
 npm run db:migrate

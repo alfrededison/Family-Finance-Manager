@@ -10,11 +10,11 @@
     "build": "vite build",
     "icons": "bash scripts/generate-icons.sh",
     "deploy": "npm run build && wrangler pages deploy dist",
-    "db:create": "wrangler d1 create finance-db",
-    "db:migrate": "wrangler d1 execute finance-db --remote --file=schema.sql",
-    "db:migrate:local": "wrangler d1 execute finance-db --file=schema.sql",
-    "db:seed": "wrangler d1 execute finance-db --remote --file=seed.sql",
-    "db:seed:local": "wrangler d1 execute finance-db --file=seed.sql"
+    "setup": "bash scripts/setup.sh",
+    "db:migrate": "bash scripts/db.sh migrate",
+    "db:migrate:local": "bash scripts/db.sh migrate:local",
+    "db:seed": "bash scripts/db.sh seed",
+    "db:seed:local": "bash scripts/db.sh seed:local"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
