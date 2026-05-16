@@ -157,7 +157,7 @@ function renderTable(assets) {
             </td>
             <td>${a.member_id ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>` : '—'}</td>
             <td class="num">${['bank', 'tien-gui', 'cho-vay', 'di-vay'].includes(a.group_id) ? '—' : `${a.qty || 0} ${escapeHtml(a.unit || '')}`}</td>
-            <td class="num"><strong>${fmtVND(a.value)}</strong></td>
+            <td class="num"><strong>${fmtVND(a.value)}</strong>${a.cost != null && a.cost !== a.value ? `<div class="muted-sm">${fmtVND(a.cost)}</div>` : ''}</td>
             <td class="num ${a.pnl == null ? '' : (a.pnl >= 0 ? 'pos' : 'neg')}">
               ${fmtVND(a.pnl)}<br/><small>${fmtPct(a.pnlPct)}</small>
             </td>
