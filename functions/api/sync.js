@@ -64,11 +64,22 @@ export async function onRequestDelete({ env, request }) {
 
     const prefix = srcPrefix(service, instance_id);
     const now = nowISO();
-    const result = await env.DB.prepare(
+
+    const affected = await env.DB.prepare(
+      `SELECT id, current_price FROM assets WHERE status = 'active' AND notes LIKE ?`
+    ).bind(`${prefix}%`).all();
+
+    for (const a of (affected.results ?? [])) {
+      await env.DB.prepare(
+        `INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, 'delete', ?)`
+      ).bind(a.id, a.current_price ?? 0, now, `sync:${service}`, 'Đã xoá (ngắt kết nối tích hợp)').run();
+    }
+
+    await env.DB.prepare(
       `UPDATE assets SET status = 'deleted', updated_at = ? WHERE status = 'active' AND notes LIKE ?`
     ).bind(now, `${prefix}%`).run();
 
-    return json({ removed: result.meta.changes ?? 0 });
+    return json({ removed: affected.results?.length ?? 0 });
   } catch (err) {
     return error(err.message, 500);
   }
