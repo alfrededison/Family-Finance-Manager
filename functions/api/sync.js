@@ -211,6 +211,34 @@ async function syncTcbs(env, instance, assetType) {
     });
   }
 
+  if (assetType === 'tien-mat') {
+    const resp = await fetch(
+      `${TCBS_BASE}/cappu/v1/customers/${custody_code}/queryBankBalance`,
+      { headers }
+    );
+    if (!resp.ok) throw new Error(await apiError(resp, 'Token TCBS không hợp lệ hoặc đã hết hạn'));
+    const data = await resp.json();
+    console.log('[TCBS tien-mat]', JSON.stringify(data));
+    const balances = (data.data ?? []).filter((b) => (b.available ?? 0) > 0);
+
+    return upsertAssets(env, 'tcbs', instance, balances, {
+      groupId: 'bank',
+      subtype: 'tk-tu-do',
+      toKey: (b) => ({ keyType: 'partner', keyValue: b.partner }),
+      toAsset: (b) => ({
+        name: b.partner,
+        group_id: 'bank',
+        subtype: 'tk-tu-do',
+        qty: 1,
+        unit: 'VND',
+        cost_price: b.available,
+        current_price: b.available,
+        platform: 'TCBS',
+        ticker: null,
+      }),
+    });
+  }
+
   throw new Error(`TCBS does not support asset type: ${assetType}`);
 }
 

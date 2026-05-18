@@ -9,6 +9,7 @@ const INTEGRATION_DEFS = {
       { id: 'co-phieu',   label: 'Cổ phiếu' },
       { id: 'trai-phieu', label: 'Trái phiếu' },
       { id: 'ccq',        label: 'Chứng chỉ quỹ' },
+      { id: 'tien-mat',   label: 'Tiền / Ngân hàng' },
     ],
     fields: [
       { name: 'custody_code', label: 'Custody Code', placeholder: 'VD: 105C543780' },
