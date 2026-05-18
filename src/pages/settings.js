@@ -94,6 +94,10 @@ export async function renderSettings(view) {
     <div class="section">
       <h2>Ứng dụng</h2>
       <p class="muted-sm" style="margin: -8px 0 12px;">Kiểm tra và áp dụng phiên bản mới nhất của ứng dụng.</p>
+      <p class="muted-sm" style="margin: -4px 0 12px; font-family: monospace;">
+        ${__GIT_SHA__} &mdash; ${__GIT_MESSAGE__}<br>
+        ${__GIT_TIMESTAMP__}
+      </p>
       <div class="toolbar">
         <button type="button" id="btn-force-reload">↺ Tải phiên bản mới nhất</button>
       </div>
