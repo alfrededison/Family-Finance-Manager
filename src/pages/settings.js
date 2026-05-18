@@ -453,19 +453,17 @@ async function reloadIntegrations() {
 
   const serviceBlocks = Object.entries(INTEGRATION_DEFS).map(([serviceId, def]) => {
     const instances = parseInstances(settings[`integration.${serviceId}.instances`]);
-
     const cards = instances.map((inst) => renderInstanceCard(serviceId, def, inst, members)).join('');
-
     return `
-      <div class="integration-service" data-service="${escapeHtml(serviceId)}">
+      <div class="market-subtype" data-service="${escapeHtml(serviceId)}">
         <h3>${escapeHtml(def.label)}</h3>
-        <div class="instance-list">${cards || '<div class="empty muted-sm">Chưa có kết nối</div>'}</div>
-        <div class="toolbar" style="margin-top:10px;">
-          <button type="button" class="btn-add-instance">+ Thêm kết nối ${escapeHtml(def.label)}</button>
+        <div class="instance-list">${cards || '<div class="muted-sm" style="padding:6px 0;">Chưa có kết nối</div>'}</div>
+        <div class="toolbar" style="margin-top:8px; margin-bottom:0;">
+          <button type="button" class="btn-add-instance small">+ Thêm kết nối</button>
         </div>
       </div>
     `;
-  }).join('<hr style="margin: 16px 0; border: none; border-top: 1px solid var(--border)">');
+  }).join('');
 
   container.innerHTML = serviceBlocks;
 
@@ -523,31 +521,34 @@ function renderInstanceCard(serviceId, def, inst, members) {
   `).join('');
 
   return `
-    <div class="instance-card" data-service="${escapeHtml(serviceId)}" data-id="${escapeHtml(inst.id)}">
+    <div class="instance-card" data-service="${escapeHtml(serviceId)}" data-id="${escapeHtml(inst.id)}" data-name="${escapeHtml(inst.name)}">
       <div class="instance-header">
-        <span class="instance-name"><strong>${escapeHtml(inst.name)}</strong></span>
-        ${memberChip}
-        ${tokenBadge}
-        <span style="flex:1"></span>
-        ${hasToken ? `<button type="button" class="btn-update-token secondary small" title="Cập nhật token">🔑 Token</button>` : ''}
-        <button type="button" class="btn-delete-instance danger small" title="Xoá kết nối">✕</button>
+        <div class="instance-info">
+          <strong>${escapeHtml(inst.name)}</strong>
+          ${memberChip}
+          ${tokenBadge}
+        </div>
+        <div class="instance-actions">
+          ${hasToken
+            ? `<button type="button" class="btn-sync icon-btn small" title="Đồng bộ">↻</button>
+               <button type="button" class="btn-update-token icon-btn small" title="Cập nhật token">🔑</button>`
+            : `<button type="button" class="btn-import-json icon-btn small" title="Import JSON">📂</button>`
+          }
+          <button type="button" class="btn-delete-instance icon-btn small" title="Xoá kết nối" style="color:var(--danger)">✕</button>
+        </div>
       </div>
       ${hasToken ? `
       <div class="token-update-form" hidden>
-        <form class="toolbar" style="margin-top:8px; gap:6px;">
+        <form class="toolbar" style="margin: 0 12px 8px; gap:6px;">
           <input type="text" class="token-input" placeholder="Paste token mới vào đây..." style="flex:1; min-width:0;" />
           <button type="submit" class="small">Lưu</button>
           <button type="button" class="small secondary btn-cancel-token">Huỷ</button>
         </form>
       </div>` : ''}
-      <div class="asset-type-checklist" style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;">
-        ${checkboxes}
-      </div>
-      <div class="toolbar" style="margin-top:10px;">
-        ${def.syncMode === 'import'
-          ? `<button type="button" class="btn-import-json small">📂 Import JSON</button>`
-          : `<button type="button" class="btn-sync small">↻ Đồng bộ</button>`
-        }
+      <div class="instance-body">
+        <div class="asset-type-checklist">
+          ${checkboxes}
+        </div>
       </div>
     </div>
   `;
@@ -591,7 +592,7 @@ function bindInstanceCardActions(container) {
 
     if (def.syncMode === 'import') {
       card.querySelector('.btn-import-json').onclick = () =>
-        openImportJsonModal(serviceId, def, instanceId);
+        openImportJsonModal(serviceId, def, instanceId, card.dataset.name);
     } else {
       card.querySelector('.btn-sync').onclick = async () => {
         const btn = card.querySelector('.btn-sync');
@@ -674,9 +675,10 @@ async function removeInstance(serviceId, instanceId) {
   });
 }
 
-function openImportJsonModal(serviceId, def, instanceId) {
+function openImportJsonModal(serviceId, def, instanceId, instanceName) {
   openModal(`
     <h3>Import dữ liệu ${escapeHtml(def.label)}</h3>
+    <p>Kết nối: <strong>${escapeHtml(instanceName)}</strong></p>
     <p class="muted-sm">
       Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt → F12 → Network →
       tìm request dữ liệu → Copy Response → lưu file .json → upload lên đây.

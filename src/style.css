@@ -772,3 +772,50 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
 }
 .provider-toggle input[type="radio"]:checked + .provider-toggle-track { background: var(--primary); }
 .provider-toggle input[type="radio"]:checked + .provider-toggle-track::after { transform: translateX(16px); }
+
+/* Integration instance cards */
+.instance-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+.instance-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.instance-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.instance-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.instance-body {
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--border);
+}
+.asset-type-checklist {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
