@@ -176,6 +176,12 @@ function renderTable(assets) {
   `;
 }
 
+function stripSrcPrefix(notes) {
+  if (!notes) return null;
+  const m = notes.match(/^__src:([^:]+):[^|]+\|(.+)$/);
+  return m ? `source:${m[1].toUpperCase()} · ${m[2]}` : notes;
+}
+
 function subInfoLine(a) {
   const bits = [];
   if (a.group_id === 'bank' && a.bank) bits.push(formatBank(a.bank));
@@ -183,7 +189,8 @@ function subInfoLine(a) {
   if (a.term) bits.push(`Kỳ hạn: ${a.term} tháng`);
   if (a.maturity_date) bits.push('Đáo hạn: ' + a.maturity_date);
   if (a.interest_rate != null && a.interest_rate !== '') bits.push(a.interest_rate + '%');
-  if (a.notes) bits.push(a.notes);
+  const notes = stripSrcPrefix(a.notes);
+  if (notes) bits.push(notes);
   if (!bits.length) return '';
   return `<div class="muted-sm">${bits.map(escapeHtml).join(' · ')}</div>`;
 }
@@ -335,6 +342,9 @@ function formDauTu(subtypes, members, asset) {
     </label>
     <label>Giá hiện tại / đơn vị
       <input name="current_price" type="text" inputmode="numeric" data-money value="${a.current_price ?? 0}" />
+    </label>
+    <label data-bond-field>Ngày đáo hạn
+      <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
     </label>
     <label class="full">Mã ticker <span class="muted-sm">(để lấy giá tự động sau này)</span>
       <input name="ticker" value="${escapeHtml(a.ticker || '')}" placeholder="VD: VNM, bitcoin, VESAF" />
@@ -521,6 +531,18 @@ function formBank(subtypes, members, asset) {
 function bindFormBehaviour(groupId, formBody) {
   if (groupId === 'tien-gui') {
     bindTermTrio(formBody);
+    return;
+  }
+  if (groupId === 'dau-tu') {
+    const subtypeEl = formBody.querySelector('select[name="subtype"]');
+    const bondFields = formBody.querySelectorAll('[data-bond-field]');
+    if (!subtypeEl || !bondFields.length) return;
+    const toggle = () => {
+      const show = subtypeEl.value === 'trai-phieu';
+      bondFields.forEach((el) => { el.style.display = show ? '' : 'none'; });
+    };
+    subtypeEl.addEventListener('change', toggle);
+    toggle();
     return;
   }
   if (groupId !== 'bank') return;
