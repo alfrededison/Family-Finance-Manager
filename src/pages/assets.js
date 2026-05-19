@@ -347,17 +347,33 @@ function stripSrcPrefix(notes) {
   return m ? `source:${m[1].toUpperCase()} · ${m[2]}` : notes;
 }
 
+function maturityChip(maturityDate) {
+  if (!maturityDate) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const mat = new Date(maturityDate);
+  mat.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((mat - today) / 86400000);
+  if (diffDays < 0) return `<span class="badge neg">Quá hạn: ${Math.abs(diffDays)} ngày</span>`;
+  if (diffDays === 0) return `<span class="badge pos">Đáo hạn hôm nay</span>`;
+  if (diffDays <= 3) return `<span class="badge warn">Sắp đáo hạn: ${diffDays} ngày</span>`;
+  return '';
+}
+
 function subInfoLine(a) {
   const bits = [];
   if (a.group_id === 'bank' && a.bank) bits.push(formatBank(a.bank));
   if (a.group_id === 'tien-gui' && a.platform) bits.push(a.platform);
   if (a.term) bits.push(`Kỳ hạn: ${a.term} tháng`);
-  if (a.maturity_date) bits.push('Đáo hạn: ' + a.maturity_date);
   if (a.interest_rate != null && a.interest_rate !== '') bits.push(a.interest_rate + '%');
   const notes = stripSrcPrefix(a.notes);
   if (notes) bits.push(notes);
-  if (!bits.length) return '';
-  return `<div class="muted-sm">${bits.map(escapeHtml).join(' · ')}</div>`;
+  const textPart = bits.map(escapeHtml).join(' · ');
+  const datePart = a.maturity_date ? `Đáo hạn: ${escapeHtml(a.maturity_date)}` : '';
+  const chip = maturityChip(a.maturity_date);
+  const parts = [textPart, datePart].filter(Boolean).join(' · ');
+  if (!parts && !chip) return '';
+  return `<div class="muted-sm">${parts}${parts && chip ? ' ' : ''}${chip}</div>`;
 }
 
 function bindRowActions(assets, members, reload) {
