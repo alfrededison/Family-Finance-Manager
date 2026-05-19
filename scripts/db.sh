@@ -16,7 +16,7 @@ fi
 case "$1" in
   migrate)        wrangler d1 execute "$DB_NAME" --file=schema.sql ;;
   migrate:remote) wrangler d1 execute "$DB_NAME" --remote --file=schema.sql ;;
-  seed)           wrangler d1 execute "$DB_NAME" --file=init.sql ;;
+  seed)           wrangler d1 execute "$DB_NAME" --file=demo.sql ;;
   seed:remote)    wrangler d1 execute "$DB_NAME" --remote --file=init.sql ;;
   *)
     echo "Usage: $0 {migrate|migrate:remote|seed|seed:remote}"
