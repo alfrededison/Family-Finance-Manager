@@ -12,9 +12,9 @@
     "deploy": "npm run build && wrangler pages deploy dist",
     "setup": "bash scripts/setup.sh",
     "db:migrate": "bash scripts/db.sh migrate",
-    "db:migrate:local": "bash scripts/db.sh migrate:local",
+    "db:migrate:remote": "bash scripts/db.sh migrate:remote",
     "db:seed": "bash scripts/db.sh seed",
-    "db:seed:local": "bash scripts/db.sh seed:local"
+    "db:seed:remote": "bash scripts/db.sh seed:remote"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

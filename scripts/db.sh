@@ -14,12 +14,12 @@ if [ -z "$DB_NAME" ]; then
 fi
 
 case "$1" in
-  migrate)       wrangler d1 execute "$DB_NAME" --remote --file=schema.sql ;;
-  migrate:local) wrangler d1 execute "$DB_NAME" --file=schema.sql ;;
-  seed)          wrangler d1 execute "$DB_NAME" --remote --file=seed.sql ;;
-  seed:local)    wrangler d1 execute "$DB_NAME" --file=seed.sql ;;
+  migrate)        wrangler d1 execute "$DB_NAME" --file=schema.sql ;;
+  migrate:remote) wrangler d1 execute "$DB_NAME" --remote --file=schema.sql ;;
+  seed)           wrangler d1 execute "$DB_NAME" --file=init.sql ;;
+  seed:remote)    wrangler d1 execute "$DB_NAME" --remote --file=init.sql ;;
   *)
-    echo "Usage: $0 {migrate|migrate:local|seed|seed:local}"
+    echo "Usage: $0 {migrate|migrate:remote|seed|seed:remote}"
     exit 1
     ;;
 esac
