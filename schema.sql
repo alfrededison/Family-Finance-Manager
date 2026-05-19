@@ -42,7 +42,6 @@ CREATE TABLE assets (
   interest_rate     REAL,
   interest_tax_rate REAL,            -- % tax withheld on interest (Tiền gửi: usually 5)
   start_date     TEXT,
-  end_date       TEXT,
   notes          TEXT,
   ticker         TEXT,
   status         TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed', 'deleted')),

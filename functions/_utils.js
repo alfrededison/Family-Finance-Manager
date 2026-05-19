@@ -47,7 +47,7 @@ export function computeAccrualPnl(a) {
 }
 
 // Forward-looking interest for cho-vay / đi-vay:
-//   - has start_date + end_date: full period interest = principal × rate × years
+//   - has start_date + maturity_date: full period interest = principal × rate × years
 //   - else: one month of interest = principal × rate / 12
 // Returns null when inputs are insufficient.
 export function computeLoanInterest(a) {
@@ -56,9 +56,9 @@ export function computeLoanInterest(a) {
   if (principal <= 0) return null;
   const ratePct = a.interest_rate / 100;
 
-  if (a.start_date && a.end_date) {
+  if (a.start_date && a.maturity_date) {
     const start = new Date(a.start_date);
-    const end = new Date(a.end_date);
+    const end = new Date(a.maturity_date);
     if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start) {
       const years = (end - start) / 86400000 / 365;
       return principal * ratePct * years;

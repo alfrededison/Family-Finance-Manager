@@ -172,7 +172,7 @@ export async function renderAssets(view) {
 
 function sortAssets(assets, sortBy) {
   const copy = [...assets];
-  const matKey = (a) => a.maturity_date || a.end_date || '9999-99-99';
+  const matKey = (a) => a.maturity_date || '9999-99-99';
   if (sortBy === 'maturity-asc') return copy.sort((a, b) => matKey(a).localeCompare(matKey(b)));
   if (sortBy === 'value-desc')   return copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   if (sortBy === 'pnl-desc')     return copy.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity));
@@ -353,7 +353,6 @@ function subInfoLine(a) {
   if (a.group_id === 'tien-gui' && a.platform) bits.push(a.platform);
   if (a.term) bits.push(`Kỳ hạn: ${a.term} tháng`);
   if (a.maturity_date) bits.push('Đáo hạn: ' + a.maturity_date);
-  if (['cho-vay', 'di-vay'].includes(a.group_id) && a.end_date) bits.push('Đáo hạn: ' + a.end_date);
   if (a.interest_rate != null && a.interest_rate !== '') bits.push(a.interest_rate + '%');
   const notes = stripSrcPrefix(a.notes);
   if (notes) bits.push(notes);
@@ -578,7 +577,7 @@ function formChoVay(subtypes, members, asset) {
       <input name="start_date" type="date" value="${escapeHtml(a.start_date || '')}" />
     </label>
     <label>Ngày đáo hạn
-      <input name="end_date" type="date" value="${escapeHtml(a.end_date || '')}" />
+      <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
     </label>
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />
@@ -609,7 +608,7 @@ function formDiVay(subtypes, members, asset) {
       <input name="start_date" type="date" value="${escapeHtml(a.start_date || '')}" />
     </label>
     <label>Ngày đáo hạn
-      <input name="end_date" type="date" value="${escapeHtml(a.end_date || '')}" />
+      <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
     </label>
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />

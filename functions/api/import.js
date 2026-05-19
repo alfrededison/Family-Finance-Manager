@@ -7,7 +7,7 @@ const COLUMNS = {
   assets: [
     'id', 'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
     'cost_price', 'current_price', 'platform', 'term', 'maturity_date', 'bank',
-    'interest_rate', 'interest_tax_rate', 'start_date', 'end_date', 'notes', 'ticker',
+    'interest_rate', 'interest_tax_rate', 'start_date', 'notes', 'ticker',
     'status', 'created_at', 'updated_at',
   ],
   settings: ['key', 'value'],
@@ -97,9 +97,9 @@ async function runMerge(env, data) {
       INSERT INTO assets (
         name, group_id, subtype, member_id, qty, unit,
         cost_price, current_price, platform, term, maturity_date, bank,
-        interest_rate, interest_tax_rate, start_date, end_date, notes, ticker,
+        interest_rate, interest_tax_rate, start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       r.name, r.group_id, r.subtype || null,
       r.member_id != null ? (memberMap[r.member_id] ?? null) : null,
@@ -107,7 +107,7 @@ async function runMerge(env, data) {
       Number(r.cost_price || 0), Number(r.current_price || 0),
       r.platform || null, r.term || null, r.maturity_date || null, r.bank || null,
       r.interest_rate ?? null, r.interest_tax_rate ?? null,
-      r.start_date || null, r.end_date || null, r.notes || null, r.ticker || null,
+      r.start_date || null, r.notes || null, r.ticker || null,
       r.status || 'active', r.created_at || nowISO(), r.updated_at || nowISO(),
     ]);
     assetMap[r.id] = newId;

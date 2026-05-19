@@ -47,9 +47,9 @@ export async function onRequestPost({ env, request }) {
         name, group_id, subtype, member_id, qty, unit,
         cost_price, current_price,
         platform, term, maturity_date, bank,
-        interest_rate, interest_tax_rate, start_date, end_date, notes, ticker,
+        interest_rate, interest_tax_rate, start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `).bind(
       b.name,
       String(b.group_id),
@@ -66,7 +66,6 @@ export async function onRequestPost({ env, request }) {
       b.interest_rate != null && b.interest_rate !== '' ? Number(b.interest_rate) : null,
       b.interest_tax_rate != null && b.interest_tax_rate !== '' ? Number(b.interest_tax_rate) : null,
       b.start_date || null,
-      b.end_date || null,
       b.notes || null,
       b.ticker || null,
       now,
