@@ -363,8 +363,7 @@ function aggregate(assets, members) {
     const value = a.value || 0;
     const cost = a.cost || 0;
     if (isLiability) totalLiability += value;
-    else totalAsset += value;
-    totalCost += cost;
+    else { totalAsset += value; totalCost += cost; }
     const liquid = isLiquid(a);
     if (liquid) liquidAsset += value;
 
@@ -406,7 +405,7 @@ function aggregate(assets, members) {
   }
 
   const netWorth = totalAsset - totalLiability;
-  const pnl = totalAsset - totalCost;
+  const pnl = (assets || []).reduce((s, a) => s + (a.pnl ?? 0), 0);
   const pnlPct = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
 
   const sortByValue = (obj) => Object.values(obj).sort((a, b) => b.value - a.value);
