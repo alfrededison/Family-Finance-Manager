@@ -1,4 +1,7 @@
-const CACHE = 'finance-shell-v2';
+// Hậu tố version được thay bằng git hash khi build (xem swCacheVersion plugin
+// trong vite.config.js). Trong dev mode placeholder giữ nguyên — không sao,
+// chỉ là tên cache.
+const CACHE = 'finance-shell-__CACHE_VERSION__';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
