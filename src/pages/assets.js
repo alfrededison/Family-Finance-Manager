@@ -5,11 +5,9 @@ import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
 import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid } from '../data/groups.js';
 
-// Asset fields that hold VND amounts — tagged with data-money so they get
-// auto-formatted on input and parsed back to plain integers on submit.
 const MONEY_FIELDS = ['cost_price', 'current_price'];
-
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
+const PAGE_SIZE = 20;
 
 export async function renderAssets(view) {
   const hashQuery = window.location.hash.split('?')[1] || '';
@@ -19,6 +17,8 @@ export async function renderAssets(view) {
   const initMember    = urlParams.get('member')     || '';
   const initAvailable = urlParams.get('available')  || '';
   const initSubtype   = urlParams.get('subtype')    || '';
+  const initSort      = urlParams.get('sort')       || 'id-desc';
+  const initView      = urlParams.get('view')       || 'grouped';
 
   const applyAvailableFilter = (list, av) => {
     if (av === '1') return list.filter((a) => isLiquid(a));
@@ -50,7 +50,7 @@ export async function renderAssets(view) {
 
     <div class="section">
       <div class="toolbar">
-        <input id="f-q" placeholder="Tìm kiếm theo tên..." value="${escapeHtml(initQ)}" style="flex:1; min-width:200px;" />
+        <input id="f-q" placeholder="Tìm kiếm theo tên..." value="${escapeHtml(initQ)}" style="flex:1; min-width:140px;" />
         <select id="f-group">
           <option value="">Tất cả nhóm</option>
           ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
@@ -64,47 +64,80 @@ export async function renderAssets(view) {
           <option value="1" ${initAvailable === '1' ? 'selected' : ''}>Khả dụng</option>
           <option value="0" ${initAvailable === '0' ? 'selected' : ''}>Chưa khả dụng</option>
         </select>
+        <select id="f-sort">
+          <option value="id-desc"      ${initSort === 'id-desc'      ? 'selected' : ''}>Mặc định</option>
+          <option value="maturity-asc" ${initSort === 'maturity-asc' ? 'selected' : ''}>Đáo hạn sớm nhất</option>
+          <option value="value-desc"   ${initSort === 'value-desc'   ? 'selected' : ''}>Giá trị cao nhất</option>
+          <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
+        </select>
+        <div class="view-toggle">
+          <button id="f-view-grouped" class="small secondary ${initView === 'grouped' ? 'active' : ''}">Nhóm</button>
+          <button id="f-view-flat"    class="small secondary ${initView === 'flat'    ? 'active' : ''}">Danh sách</button>
+        </div>
       </div>
 
-      <div id="asset-list">${renderTable(assets)}</div>
+      <div id="asset-list"></div>
     </div>
   `;
 
   let filterTimer;
   let cachedAll = allAssets;
   let currentAssets = assets;
+  let currentPage = 0;
+
+  const getViewMode = () =>
+    document.getElementById('f-view-grouped').classList.contains('active') ? 'grouped' : 'flat';
+  const getSort = () => document.getElementById('f-sort').value;
 
   const syncURL = () => {
     const q         = document.getElementById('f-q').value;
     const group     = document.getElementById('f-group').value;
     const member    = document.getElementById('f-member').value;
     const available = document.getElementById('f-available').value;
+    const sort      = getSort();
+    const vw        = getViewMode();
     const p = new URLSearchParams();
-    if (q)         p.set('q', q);
-    if (group)     p.set('group', group);
-    if (member)    p.set('member', member);
-    if (available) p.set('available', available);
+    if (q)                 p.set('q', q);
+    if (group)             p.set('group', group);
+    if (member)            p.set('member', member);
+    if (available)         p.set('available', available);
+    if (sort !== 'id-desc')     p.set('sort', sort);
+    if (vw !== 'grouped')  p.set('view', vw);
     const qs = p.toString();
     history.replaceState(null, '', qs ? `#/assets?${qs}` : '#/assets');
   };
 
+  const redisplay = () => {
+    const sorted = sortAssets(currentAssets, getSort());
+    const vw = getViewMode();
+    document.getElementById('asset-list').innerHTML =
+      renderSummaryBar(currentAssets) +
+      (vw === 'grouped'
+        ? renderGroupedView(sorted)
+        : renderFlatView(sorted, currentPage));
+    bindRowActions(currentAssets, members, reload);
+    document.querySelectorAll('#asset-list [data-page]').forEach((btn) => {
+      btn.onclick = () => { currentPage = Number(btn.dataset.page); redisplay(); };
+    });
+  };
+
   const reload = async () => {
-    const q      = document.getElementById('f-q').value;
-    const group  = document.getElementById('f-group').value;
-    const member = document.getElementById('f-member').value;
+    const q         = document.getElementById('f-q').value;
+    const group     = document.getElementById('f-group').value;
+    const member    = document.getElementById('f-member').value;
     const available = document.getElementById('f-available').value;
     syncURL();
     const fetched = await fetchAssets(q, group, member);
     cachedAll = fetched;
-    const filtered = applyAvailableFilter(fetched, available);
-    currentAssets = filtered;
-    document.getElementById('asset-list').innerHTML = renderTable(filtered);
-    bindRowActions(filtered, members, reload);
+    currentAssets = applyAvailableFilter(fetched, available);
+    currentPage = 0;
+    redisplay();
   };
+
+  redisplay();
 
   document.getElementById('btn-new').onclick = () => openAssetModal(null, members, reload);
 
-  // PWA shortcut: /#/assets?new=1 opens the new-asset modal
   if (urlParams.get('new') === '1') {
     history.replaceState(null, '', '#/assets');
     openAssetModal(null, members, reload);
@@ -118,61 +151,193 @@ export async function renderAssets(view) {
   document.getElementById('f-member').onchange = reload;
   document.getElementById('f-available').onchange = () => {
     syncURL();
-    const v = document.getElementById('f-available').value;
-    const filtered = applyAvailableFilter(cachedAll, v);
-    currentAssets = filtered;
-    document.getElementById('asset-list').innerHTML = renderTable(filtered);
-    bindRowActions(filtered, members, reload);
+    currentAssets = applyAvailableFilter(cachedAll, document.getElementById('f-available').value);
+    currentPage = 0;
+    redisplay();
   };
+  document.getElementById('f-sort').onchange = () => { syncURL(); redisplay(); };
 
-  bindRowActions(currentAssets, members, reload);
+  const setView = (vw) => {
+    document.getElementById('f-view-grouped').classList.toggle('active', vw === 'grouped');
+    document.getElementById('f-view-flat').classList.toggle('active', vw === 'flat');
+    currentPage = 0;
+    syncURL();
+    redisplay();
+  };
+  document.getElementById('f-view-grouped').onclick = () => setView('grouped');
+  document.getElementById('f-view-flat').onclick    = () => setView('flat');
 }
 
-function renderTable(assets) {
-  if (!assets.length) return '<div class="empty">Chưa có tài sản nào</div>';
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+function sortAssets(assets, sortBy) {
+  const copy = [...assets];
+  const matKey = (a) => a.maturity_date || a.end_date || '9999-99-99';
+  if (sortBy === 'maturity-asc') return copy.sort((a, b) => matKey(a).localeCompare(matKey(b)));
+  if (sortBy === 'value-desc')   return copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  if (sortBy === 'pnl-desc')     return copy.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity));
+  return copy;
+}
+
+// ── Summary bar ───────────────────────────────────────────────────────────────
+
+function renderSummaryBar(assets) {
+  if (!assets.length) return '';
+  const assetItems     = assets.filter((a) => a.group_type !== 'Liability');
+  const liabilityItems = assets.filter((a) => a.group_type === 'Liability');
+  const totalAsset     = assetItems.reduce((s, a) => s + (a.value ?? 0), 0);
+  const totalLiability = liabilityItems.reduce((s, a) => s + (a.value ?? 0), 0);
+  const totalPnl       = assets.reduce((s, a) => s + (a.pnl ?? 0), 0);
+  const pnlClass       = totalPnl >= 0 ? 'pos' : 'neg';
+  const netValue       = totalAsset - totalLiability;
+
   return `
-    <div class="table-wrap"><table>
-      <thead>
-        <tr>
-          <th>Tên</th>
-          <th>Nhóm / Loại</th>
-          <th>Thành viên</th>
-          <th class="num">SL / Đơn vị</th>
-          <th class="num">Giá trị</th>
-          <th class="num">Lãi/Lỗ</th>
-          <th>Khả dụng</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${assets.map((a) => `
-          <tr data-id="${a.id}">
-            <td>
-              <strong>${escapeHtml(a.name)}</strong>
-              ${subInfoLine(a)}
-            </td>
-            <td>
-              ${escapeHtml(a.group_icon)} ${escapeHtml(a.group_name)}
-              ${a.subtype_name ? `<div class="muted-sm">${escapeHtml(a.subtype_name)}</div>` : ''}
-            </td>
-            <td>${a.member_id ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>` : '—'}</td>
-            <td class="num">${['bank', 'tien-gui', 'cho-vay', 'di-vay'].includes(a.group_id) ? '—' : `${a.qty || 0} ${escapeHtml(a.unit || '')}`}</td>
-            <td class="num"><strong>${fmtVND(a.value)}</strong>${a.cost != null && a.cost !== a.value ? `<div class="muted-sm">${fmtVND(a.cost)}</div>` : ''}</td>
-            <td class="num ${a.pnl == null ? '' : (a.pnl >= 0 ? 'pos' : 'neg')}">
-              ${fmtVND(a.pnl)}<br/><small>${fmtPct(a.pnlPct)}</small>
-            </td>
-            <td>${isLiquid(a)
-              ? '<span class="badge pos">Khả dụng</span>'
-              : '<span class="badge warn">Chưa khả dụng</span>'
-            }</td>
-            <td>
-              <button class="small secondary" data-act="edit">Sửa</button>
-              <button class="small danger" data-act="del">Xoá</button>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table></div>
+    <div class="summary-bar">
+      <div class="summary-item">
+        <span class="summary-label">Tổng tài sản</span>
+        <span class="summary-value">${fmtVND(totalAsset)}</span>
+      </div>
+      ${totalLiability ? `
+      <div class="summary-item">
+        <span class="summary-label">Tài sản ròng</span>
+        <span class="summary-value">${fmtVND(netValue)}</span>
+      </div>` : ''}
+      <div class="summary-item">
+        <span class="summary-label">Lãi / Lỗ</span>
+        <span class="summary-value ${pnlClass}">${fmtVND(totalPnl)}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Số tài sản</span>
+        <span class="summary-value">${assets.length}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ── Grouped view ──────────────────────────────────────────────────────────────
+
+function renderGroupedView(assets) {
+  if (!assets.length) return '<div class="empty">Chưa có tài sản nào</div>';
+
+  const byGroup = new Map();
+  for (const a of assets) {
+    if (!byGroup.has(a.group_id)) byGroup.set(a.group_id, []);
+    byGroup.get(a.group_id).push(a);
+  }
+
+  return ASSET_GROUPS
+    .filter((g) => byGroup.has(g.id))
+    .map((g) => {
+      const items        = byGroup.get(g.id);
+      const subtotal     = items.reduce((s, a) => s + (a.value ?? 0), 0);
+      const subtotalPnl  = items.reduce((s, a) => s + (a.pnl ?? 0), 0);
+      const pnlClass     = subtotalPnl >= 0 ? 'pos' : 'neg';
+      const pnlSign      = subtotalPnl >= 0 ? '+' : '';
+      return `
+        <div class="asset-group-section">
+          <div class="asset-group-header">
+            <span class="group-header-title"><span class="group-chevron">▾</span> ${escapeHtml(g.icon)} ${escapeHtml(g.name)} <span class="muted-sm">(${items.length})</span></span>
+            <span class="group-header-totals">
+              <span class="group-total-value">${fmtVND(subtotal)}</span>
+              <span class="group-total-pnl ${pnlClass}">${pnlSign}${fmtVND(subtotalPnl)}</span>
+            </span>
+          </div>
+          <div class="asset-list">
+            ${renderListHeader(false)}
+            ${items.map((a) => renderAssetRow(a, false)).join('')}
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+// ── Flat view with pagination ─────────────────────────────────────────────────
+
+function renderFlatView(assets, page) {
+  if (!assets.length) return '<div class="empty">Chưa có tài sản nào</div>';
+
+  const pageItems = assets.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  return `
+    <div class="asset-list">
+      ${renderListHeader(true)}
+      ${pageItems.map((a) => renderAssetRow(a, true)).join('')}
+    </div>
+    ${assets.length > PAGE_SIZE ? renderPagination(assets.length, page) : ''}
+  `;
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+function renderPagination(total, currentPage) {
+  const pageCount = Math.ceil(total / PAGE_SIZE);
+  const pages = Array.from({ length: pageCount }, (_, i) =>
+    `<button class="small secondary${i === currentPage ? ' active' : ''}" data-page="${i}">${i + 1}</button>`
+  ).join('');
+  return `
+    <div class="pagination">
+      <button class="small secondary" data-page="${currentPage - 1}" ${currentPage === 0 ? 'disabled' : ''}>‹ Trước</button>
+      ${pages}
+      <button class="small secondary" data-page="${currentPage + 1}" ${currentPage === pageCount - 1 ? 'disabled' : ''}>Sau ›</button>
+    </div>
+  `;
+}
+
+// ── Column header ─────────────────────────────────────────────────────────────
+
+function renderListHeader(showGroup) {
+  return `
+    <div class="asset-list-header">
+      <div class="ar-name">Tên</div>
+      <div class="ar-meta">${showGroup ? 'Nhóm / Loại' : 'Loại'}</div>
+      <div class="ar-value">Giá trị</div>
+      <div class="ar-pnl">Lãi / Lỗ</div>
+      <div class="ar-liquid">Khả dụng</div>
+      <div class="ar-actions"></div>
+    </div>
+  `;
+}
+
+// ── Asset row (div + CSS grid, no horizontal scroll on mobile) ────────────────
+
+function renderAssetRow(a, showGroup) {
+  const hideQty = ['bank', 'tien-gui', 'cho-vay', 'di-vay'].includes(a.group_id);
+  const qty = hideQty ? '' : `${a.qty || 0} ${escapeHtml(a.unit || '')}`;
+
+  const typeLabel = showGroup
+    ? `${escapeHtml(a.group_icon)} ${escapeHtml(a.group_name)}${a.subtype_name ? ` · ${escapeHtml(a.subtype_name)}` : ''}`
+    : (a.subtype_name ? escapeHtml(a.subtype_name) : '');
+
+  const memberHTML = a.member_id
+    ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>`
+    : '';
+
+  return `
+    <div class="asset-row" data-id="${a.id}">
+      <div class="ar-name">
+        <div class="ar-name-line">${memberHTML}<strong>${escapeHtml(a.name)}</strong></div>
+        ${subInfoLine(a)}
+      </div>
+      <div class="ar-meta">
+        ${typeLabel ? `<div class="ar-type">${typeLabel}</div>` : ''}
+        ${qty ? `<div class="ar-qty-line">${qty}</div>` : ''}
+      </div>
+      <div class="ar-value">
+        <strong>${fmtVND(a.value)}</strong>
+        ${a.cost != null && a.cost !== a.value ? `<div class="muted-sm">${fmtVND(a.cost)}</div>` : ''}
+      </div>
+      <div class="ar-pnl ${a.pnl == null ? '' : (a.pnl >= 0 ? 'pos' : 'neg')}">
+        ${fmtVND(a.pnl)}<br/><small>${fmtPct(a.pnlPct)}</small>
+      </div>
+      <div class="ar-liquid">${isLiquid(a)
+        ? '<span class="badge pos">Khả dụng</span>'
+        : '<span class="badge warn">Chưa khả dụng</span>'
+      }</div>
+      <div class="ar-actions">
+        <button class="small secondary" data-act="edit">Sửa</button>
+        <button class="small danger" data-act="del">Xoá</button>
+      </div>
+    </div>
   `;
 }
 
@@ -188,6 +353,7 @@ function subInfoLine(a) {
   if (a.group_id === 'tien-gui' && a.platform) bits.push(a.platform);
   if (a.term) bits.push(`Kỳ hạn: ${a.term} tháng`);
   if (a.maturity_date) bits.push('Đáo hạn: ' + a.maturity_date);
+  if (['cho-vay', 'di-vay'].includes(a.group_id) && a.end_date) bits.push('Đáo hạn: ' + a.end_date);
   if (a.interest_rate != null && a.interest_rate !== '') bits.push(a.interest_rate + '%');
   const notes = stripSrcPrefix(a.notes);
   if (notes) bits.push(notes);
@@ -196,11 +362,15 @@ function subInfoLine(a) {
 }
 
 function bindRowActions(assets, members, reload) {
-  document.querySelectorAll('#asset-list tr[data-id]').forEach((tr) => {
-    const id = Number(tr.dataset.id);
+  document.querySelectorAll('#asset-list .asset-group-header').forEach((header) => {
+    header.onclick = () => header.closest('.asset-group-section').classList.toggle('collapsed');
+  });
+
+  document.querySelectorAll('#asset-list .asset-row[data-id]').forEach((row) => {
+    const id = Number(row.dataset.id);
     const asset = assets.find((a) => a.id === id);
-    tr.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, members, reload);
-    tr.querySelector('[data-act="del"]').onclick = () => {
+    row.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, members, reload);
+    row.querySelector('[data-act="del"]').onclick = () => {
       openModal(`
         <h3>Xoá tài sản</h3>
         <p>Xoá "<strong>${escapeHtml(asset.name)}</strong>"?</p>
@@ -387,7 +557,6 @@ function formTichTru(subtypes, members, asset) {
 }
 
 // ─── Cho vay ───────────────────────────────────────────────────────────────
-// Stored as qty=1, cost_price = principal lent. current_price = total owed (principal + accrued).
 function formChoVay(subtypes, members, asset) {
   const a = asset || {};
   return `<form id="asset-form" class="form-grid">
@@ -419,7 +588,6 @@ function formChoVay(subtypes, members, asset) {
 }
 
 // ─── Đi vay ────────────────────────────────────────────────────────────────
-// Stored as qty=1, cost_price = original principal, current_price = remaining balance (current liability).
 function formDiVay(subtypes, members, asset) {
   const a = asset || {};
   return `<form id="asset-form" class="form-grid">
@@ -525,8 +693,7 @@ function formBank(subtypes, members, asset) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Form behaviour (Bank: show savings fields only for term-savings subtypes;
-// tiền gửi + bank savings: bidirectional start/maturity/term auto-fill)
+// Form behaviour
 // ────────────────────────────────────────────────────────────────────────────
 function bindFormBehaviour(groupId, formBody) {
   if (groupId === 'tien-gui') {
@@ -560,10 +727,7 @@ function bindFormBehaviour(groupId, formBody) {
   toggle();
 }
 
-// ─── Term/date trio: any 2 of {start_date, maturity_date, term} → 3rd ──────
-// When user edits one field, prefer to keep `term` sticky (it represents an
-// intentional choice), so editing a date recomputes the *other* date when
-// term is set.
+// ─── Term/date trio ──────────────────────────────────────────────────────────
 function addMonths(dateStr, months) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '';
@@ -608,7 +772,7 @@ function bindTermTrio(formBody) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Submit handler — collects form data, posts to API
+// Submit handler
 // ────────────────────────────────────────────────────────────────────────────
 function bindSubmit(groupId, formBody, asset, editing, reload) {
   const form = formBody.querySelector('#asset-form');
