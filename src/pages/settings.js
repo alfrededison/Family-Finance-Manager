@@ -460,6 +460,7 @@ async function reloadIntegrations() {
         <div class="instance-list">${cards || '<div class="muted-sm" style="padding:6px 0;">Chưa có kết nối</div>'}</div>
         <div class="toolbar" style="margin-top:8px; margin-bottom:0;">
           <button type="button" class="btn-add-instance small">+ Thêm kết nối</button>
+          <button type="button" class="btn-bookmarklet small secondary">📌 Bookmarklet</button>
         </div>
       </div>
     `;
@@ -471,6 +472,12 @@ async function reloadIntegrations() {
     const serviceEl = btn.closest('[data-service]');
     const serviceId = serviceEl.dataset.service;
     btn.onclick = () => openInstanceModal(serviceId, null, members);
+  });
+
+  container.querySelectorAll('.btn-bookmarklet').forEach((btn) => {
+    const serviceEl = btn.closest('[data-service]');
+    const serviceId = serviceEl.dataset.service;
+    btn.onclick = () => openBookmarkletModal(serviceId, INTEGRATION_DEFS[serviceId]);
   });
 
   bindInstanceCardActions(container);
@@ -791,5 +798,101 @@ function openInstanceModal(serviceId, existing, members) {
         toast('Lỗi: ' + err.message);
       }
     };
+  });
+}
+
+// ─── Bookmarklet generator ────────────────────────────────────────────────────
+
+function tcbsBookmarklet() {
+  // Đọc token từ localStorage['userInfo'], copy vào clipboard
+  const code = `(function(){
+var raw=localStorage.getItem('userInfo');
+if(!raw){alert('Không tìm thấy userInfo.\\nHãy đăng nhập TCBS trước.');return;}
+var token;
+try{token=JSON.parse(raw).authToken;}catch(x){}
+if(!token){alert('Không tìm thấy authToken trong userInfo.');return;}
+var exp='';
+try{var p=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(p.exp)exp=' (hết hạn: '+new Date(p.exp*1000).toLocaleDateString('vi-VN')+')';}catch(x){}
+navigator.clipboard.writeText(token).then(function(){alert('✅ Token TCBS'+exp+'\\nĐã copy! Dán vào ô "Cập nhật token" trên Finance App.');}).catch(function(){prompt('Copy token này:',token);});
+})()`;
+  return 'javascript:' + encodeURIComponent(code);
+}
+
+function topiBookmarklet() {
+  // Patch cả fetch lẫn XHR để bắt GetBalanceProfileProduct
+  const code = `(function(){
+var TARGET='GetBalanceProfileProduct';
+function download(d){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(d)],{type:'application/json'}));
+  a.download='topi-data.json';
+  a.click();
+}
+function onData(d){
+  window.__topiData=d;
+  alert('✅ Bắt được dữ liệu Topi! Đang tải file...');
+  download(d);
+}
+if(window.__topiCap){
+  if(window.__topiData){alert('✅ Tải lại file topi-data.json...');download(window.__topiData);}
+  else{alert('Chưa bắt được dữ liệu.\\nReload trang portfolio Topi rồi click lại.');}
+  return;
+}
+window.__topiCap=true;window.__topiData=null;
+var _f=window.fetch;
+window.fetch=function(url){
+  var p=_f.apply(this,arguments);
+  if(String(url).indexOf(TARGET)!==-1){
+    p.then(function(r){r.clone().json().then(onData).catch(function(){});});
+  }
+  return p;
+};
+var _open=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(m,url){
+  if(String(url).indexOf(TARGET)!==-1){
+    this.addEventListener('load',function(){
+      try{onData(JSON.parse(this.responseText));}catch(e){}
+    });
+  }
+  return _open.apply(this,arguments);
+};
+alert('✅ Topi interceptor sẵn sàng!\\Navigate trang portfolio Topi để bắt dữ liệu.');
+})()`;
+  return 'javascript:' + encodeURIComponent(code);
+}
+
+function openBookmarkletModal(serviceId, def) {
+  const isImport = def.syncMode === 'import';
+  const href = isImport ? topiBookmarklet() : tcbsBookmarklet();
+
+  const steps = isImport ? [
+    `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
+    'Click bookmark — thông báo "Interceptor sẵn sàng" xuất hiện',
+    'Reload trang portfolio để bắt dữ liệu',
+    'File topi-data.json tự động tải xuống khi bắt được',
+    'Upload file đó vào Finance App qua nút 📂 Import',
+  ] : [
+    `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
+    'Click bookmark → token tự động copy vào clipboard',
+    'Dán vào ô "Cập nhật token" 🔑 trên Finance App',
+  ];
+
+  openModal(`
+    <h3>📌 Bookmarklet ${escapeHtml(def.label)}</h3>
+    <p class="muted-sm">Kéo nút bên dưới vào <strong>Thanh Bookmarks</strong>:</p>
+    <div style="text-align:center; padding:14px 0;">
+      <a href="${href}" class="btn" draggable="true" onclick="return false;"
+         style="display:inline-block; cursor:grab; user-select:none;">
+        📌 ${escapeHtml(def.label)} Capture
+      </a>
+    </div>
+    <ol class="muted-sm" style="margin:8px 0 0; padding-left:20px; line-height:2;">
+      ${steps.map((s) => `<li>${s}</li>`).join('')}
+    </ol>
+    <div class="modal-actions full" style="margin-top:16px;">
+      <button type="button" id="bm-close">Đóng</button>
+    </div>
+  `, (root) => {
+    root.querySelector('#bm-close').onclick = closeModal;
   });
 }
