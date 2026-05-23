@@ -95,14 +95,33 @@ async function syncType(env, service, instance, assetType, rawData) {
 
 // ─── Topi ────────────────────────────────────────────────────────────────────
 
+const TOPI_PID = { 'tien-gui': 6, 'vang': 7 };
+
 async function syncTopi(env, instance, assetType, rawData) {
-  if (assetType !== 'tien-gui') throw new Error(`Topi does not support asset type: ${assetType}`);
   if (!rawData) throw new Error('Topi yêu cầu upload file JSON — không hỗ trợ sync tự động');
+  if (!TOPI_PID[assetType]) throw new Error(`Topi does not support asset type: ${assetType}`);
 
-  const data = rawData;
-  if (data.code !== 200) throw new Error(data.message?.trim() || 'Dữ liệu Topi không hợp lệ');
+  // Resolve payload — bundle format {captures:[...]} OR legacy raw response (deposit-only).
+  let payload;
+  if (Array.isArray(rawData.captures)) {
+    const pid = TOPI_PID[assetType];
+    const hit = rawData.captures.find((c) => Number(c.product_type_id) === pid);
+    if (!hit) {
+      console.log(`[Topi] no capture for ${assetType} (pid=${pid}) in bundle — skipping`);
+      return { added: 0, updated: 0, removed: 0 };
+    }
+    payload = hit.response;
+  } else {
+    if (assetType !== 'tien-gui') {
+      console.log(`[Topi] legacy raw file does not contain ${assetType} — skipping`);
+      return { added: 0, updated: 0, removed: 0 };
+    }
+    payload = rawData;
+  }
 
-  const products = data.data?.Data?.ListProduct ?? [];
+  if (payload.code !== 200) throw new Error(payload.message?.trim() || 'Dữ liệu Topi không hợp lệ');
+
+  const products = payload.data?.Data?.ListProduct ?? [];
   const incoming = [];
   for (const product of products) {
     for (const pp of (product.ProfileProducts ?? [])) {
@@ -111,27 +130,59 @@ async function syncTopi(env, instance, assetType, rawData) {
     }
   }
 
+  if (assetType === 'tien-gui') {
+    return upsertAssets(env, 'topi', instance, incoming, {
+      groupId: 'tien-gui',
+      toKey: ({ pp }) => ({ keyType: 'order', keyValue: pp.OrderNo }),
+      toAsset: ({ product, pp }) => {
+        const term = pp.Term ?? 0;
+        const expiredDate = pp.ExpiredTime?.startsWith('0001') ? null : pp.ExpiredTime?.slice(0, 10);
+        return {
+          name: (pp.ProductName || product.ProductName || '').slice(0, 40),
+          group_id: 'tien-gui',
+          subtype: term === 0 ? 'tg-linh-hoat' : 'tg-co-dinh',
+          cost_price: pp.TotalValue,
+          current_price: pp.TotalValue,
+          interest_rate: pp.InterestRate ?? null,
+          interest_tax_rate: 5,
+          term: term > 0 ? term : null,
+          start_date: pp.CreateAt?.slice(0, 10) ?? null,
+          maturity_date: term > 0 ? expiredDate : null,
+          platform: 'Topi',
+          qty: 1,
+          unit: 'VND',
+          ticker: null,
+        };
+      },
+    });
+  }
+
+  // assetType === 'vang'
   return upsertAssets(env, 'topi', instance, incoming, {
-    groupId: 'tien-gui',
+    groupId: 'tich-tru',
+    subtype: 'vang',
     toKey: ({ pp }) => ({ keyType: 'order', keyValue: pp.OrderNo }),
     toAsset: ({ product, pp }) => {
-      const term = pp.Term ?? 0;
-      const expiredDate = pp.ExpiredTime?.startsWith('0001') ? null : pp.ExpiredTime?.slice(0, 10);
+      const qty = pp.Quantity ?? 0;
+      const current = pp.Price ?? 0;
+      const cost = qty > 0
+        ? Math.round(((pp.TotalValue ?? 0) - (pp.Profit ?? 0)) / qty)
+        : current;
       return {
         name: (pp.ProductName || product.ProductName || '').slice(0, 40),
-        group_id: 'tien-gui',
-        subtype: term === 0 ? 'tg-linh-hoat' : 'tg-co-dinh',
-        cost_price: pp.TotalValue,
-        current_price: pp.TotalValue,
-        interest_rate: pp.InterestRate ?? null,
-        interest_tax_rate: 5,
-        term: term > 0 ? term : null,
-        start_date: pp.CreateAt?.slice(0, 10) ?? null,
-        maturity_date: term > 0 ? expiredDate : null,
+        group_id: 'tich-tru',
+        subtype: 'vang',
+        qty,
+        unit: 'chỉ',
+        cost_price: cost,
+        current_price: current,
         platform: 'Topi',
-        qty: 1,
-        unit: 'VND',
         ticker: null,
+        interest_rate: null,
+        interest_tax_rate: null,
+        term: null,
+        start_date: pp.CreateAt?.slice(0, 10) ?? null,
+        maturity_date: null,
       };
     },
   });

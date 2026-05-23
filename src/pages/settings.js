@@ -21,6 +21,7 @@ const INTEGRATION_DEFS = {
     syncMode: 'import',
     assetTypes: [
       { id: 'tien-gui', label: 'Tiền gửi' },
+      { id: 'vang',     label: 'Vàng' },
     ],
     fields: [],
   },
@@ -599,7 +600,7 @@ function bindInstanceCardActions(container) {
 
     if (def.syncMode === 'import') {
       card.querySelector('.btn-import-json').onclick = () =>
-        openImportJsonModal(serviceId, def, instanceId, card.dataset.name);
+        openImportJsonModal(serviceId, def, instanceId, card.dataset.name, card);
     } else {
       card.querySelector('.btn-sync').onclick = async () => {
         const btn = card.querySelector('.btn-sync');
@@ -682,7 +683,7 @@ async function removeInstance(serviceId, instanceId) {
   });
 }
 
-function openImportJsonModal(serviceId, def, instanceId, instanceName) {
+function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
   openModal(`
     <h3>Import dữ liệu ${escapeHtml(def.label)}</h3>
     <p>Kết nối: <strong>${escapeHtml(instanceName)}</strong></p>
@@ -705,12 +706,13 @@ function openImportJsonModal(serviceId, def, instanceId, instanceName) {
       e.preventDefault();
       const file = e.target.file.files[0];
       if (!file) return;
+      const assetTypes = [...card.querySelectorAll('.asset-type-check:checked')].map((c) => c.value);
+      if (!assetTypes.length) { toast('Chọn ít nhất 1 loại tài sản'); return; }
       const submitBtn = e.target.querySelector('[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.classList.add('btn-loading');
       try {
         const rawData = JSON.parse(await file.text());
-        const assetTypes = def.assetTypes.map((t) => t.id);
         const res = await api.post('/sync', {
           service: serviceId,
           instance_id: instanceId,
@@ -819,26 +821,45 @@ navigator.clipboard.writeText(token).then(function(){alert('✅ Token TCBS'+exp+
 }
 
 function topiBookmarklet() {
-  // Patch cả fetch lẫn XHR để bắt GetBalanceProfileProduct
+  // Patch fetch + XHR để bắt GetBalanceProfileProduct cho cả tiền gửi (pid 6) và vàng (pid 7).
+  // Accumulate captures keyed by product_type_id (đọc từ response.data.Data.ProfileProductPNL.ProductTypeId).
   const code = `(function(){
 var TARGET='GetBalanceProfileProduct';
-function download(d){
+function pidOf(d){try{return Number(d.data.Data.ProfileProductPNL.ProductTypeId)||0;}catch(e){return 0;}}
+function setToast(msg){
+  var el=document.getElementById('__topiToast');
+  if(!el){
+    el=document.createElement('div');
+    el.id='__topiToast';
+    el.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;background:#10b981;color:#fff;padding:8px 12px;border-radius:6px;font:14px sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+}
+function bundleStatus(){
+  var keys=Object.keys(window.__topiBundle).sort();
+  if(!keys.length)return '';
+  return 'Đã bắt: pid '+keys.join(', pid ')+'. Click bookmark lại để tải file.';
+}
+function onData(d){
+  var pid=pidOf(d);if(!pid)return;
+  window.__topiBundle[pid]=d;
+  setToast('✅ '+bundleStatus());
+  document.title='[Topi pid '+Object.keys(window.__topiBundle).sort().join('+')+'] '+(window.__topiTitle||'');
+}
+function download(){
+  var captures=Object.keys(window.__topiBundle).map(function(pid){return {product_type_id:Number(pid),response:window.__topiBundle[pid]};});
   var a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(d)],{type:'application/json'}));
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({captures:captures})],{type:'application/json'}));
   a.download='topi-data.json';
   a.click();
 }
-function onData(d){
-  window.__topiData=d;
-  alert('✅ Bắt được dữ liệu Topi! Đang tải file...');
-  download(d);
-}
 if(window.__topiCap){
-  if(window.__topiData){alert('✅ Tải lại file topi-data.json...');download(window.__topiData);}
-  else{alert('Chưa bắt được dữ liệu.\\nReload trang portfolio Topi rồi click lại.');}
+  if(Object.keys(window.__topiBundle).length===0){alert('Chưa bắt được dữ liệu. Mở tab Tiền gửi / Vàng trước rồi click lại.');}
+  else{download();}
   return;
 }
-window.__topiCap=true;window.__topiData=null;
+window.__topiCap=true;window.__topiBundle={};window.__topiTitle=document.title;
 var _f=window.fetch;
 window.fetch=function(url){
   var p=_f.apply(this,arguments);
@@ -856,7 +877,7 @@ XMLHttpRequest.prototype.open=function(m,url){
   }
   return _open.apply(this,arguments);
 };
-alert('✅ Topi interceptor sẵn sàng!\\Navigate trang portfolio Topi để bắt dữ liệu.');
+setToast('✅ Topi interceptor sẵn sàng — mở từng tab Tiền gửi / Vàng để bắt dữ liệu.');
 })()`;
   return 'javascript:' + encodeURIComponent(code);
 }
@@ -867,9 +888,10 @@ function openBookmarkletModal(serviceId, def) {
 
   const steps = isImport ? [
     `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
-    'Click bookmark — thông báo "Interceptor sẵn sàng" xuất hiện',
-    'Reload trang portfolio để bắt dữ liệu',
-    'File topi-data.json tự động tải xuống khi bắt được',
+    'Click bookmark — overlay xanh "Interceptor sẵn sàng" xuất hiện',
+    'Mở tab <b>Tiền gửi</b> — overlay cập nhật "Đã bắt: pid 6"',
+    'Mở tab <b>Vàng</b> — overlay cập nhật "Đã bắt: pid 6, pid 7"',
+    'Click lại bookmark → tải file <code>topi-data.json</code> chứa cả 2',
     'Upload file đó vào Finance App qua nút 📂 Import',
   ] : [
     `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
