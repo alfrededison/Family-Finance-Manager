@@ -2,6 +2,7 @@
 
 PRAGMA foreign_keys = ON;
 
+DROP TABLE IF EXISTS asset_snapshots;
 DROP TABLE IF EXISTS price_history;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
@@ -70,3 +71,21 @@ CREATE TABLE settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Weekly snapshots of aggregated asset value by (group_id, subtype).
+-- Populated by the cron worker (worker/index.js) and manual triggers
+-- (POST /api/snapshots/run). One row per (snapshot_date, group_id, subtype).
+CREATE TABLE asset_snapshots (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  recorded_at   TEXT    NOT NULL,
+  snapshot_date TEXT    NOT NULL,
+  group_id      TEXT    NOT NULL,
+  subtype       TEXT,
+  value         REAL    NOT NULL,
+  cost          REAL    NOT NULL,
+  asset_count   INTEGER NOT NULL
+);
+
+CREATE INDEX idx_snapshots_date ON asset_snapshots(snapshot_date);
+CREATE UNIQUE INDEX uq_snapshots_bucket
+  ON asset_snapshots(snapshot_date, group_id, COALESCE(subtype, ''));

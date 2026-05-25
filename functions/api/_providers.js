@@ -163,6 +163,16 @@ async function fetchOnePerTicker(env, provider, subtype, now) {
   return { provider: provider.id, subtype, prices, assetsUpdated, isDefault, fetched_at: now };
 }
 
+export async function fetchAllProviders(env) {
+  const tasks = [];
+  for (const p of Object.values(PROVIDERS)) {
+    for (const st of p.subtypes) {
+      tasks.push(fetchOne(env, p.id, st));
+    }
+  }
+  return Promise.all(tasks);
+}
+
 export async function fetchOne(env, providerId, subtype) {
   const provider = PROVIDERS[providerId];
   if (!provider) return { provider: providerId, subtype, error: 'unknown provider' };

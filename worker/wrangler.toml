@@ -1,0 +1,11 @@
+name = "finance-manager-cron"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-db"
+database_id = "588ecb08-91d4-4f93-9f65-990306bc48fa"
+
+[triggers]
+crons = ["0 17 * * 7"]

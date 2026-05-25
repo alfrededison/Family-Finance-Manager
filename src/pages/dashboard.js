@@ -3,7 +3,7 @@ import { fmtVND, fmtPct, escapeHtml } from '../main.js';
 import { findGroup, findSubtype, isLiquid } from '../data/groups.js';
 
 // Stable per-group colors so slices keep the same color across renders.
-const GROUP_COLORS = {
+export const GROUP_COLORS = {
   'dau-tu':   '#3b82f6',
   'tich-tru': '#f59e0b',
   'cho-vay':  '#10b981',

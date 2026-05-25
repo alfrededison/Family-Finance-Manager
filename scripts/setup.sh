@@ -7,8 +7,8 @@ if ! command -v wrangler &> /dev/null; then
   exit 1
 fi
 
-if [ -f wrangler.toml ]; then
-  read -r -p "wrangler.toml already exists. Overwrite? [y/N] " confirm
+if [ -f wrangler.toml ] || [ -f worker/wrangler.toml ]; then
+  read -r -p "wrangler.toml (root and/or worker/) already exists. Overwrite? [y/N] " confirm
   [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 0; }
 fi
 
@@ -61,8 +61,27 @@ EOF
 
 echo ""
 echo "Created wrangler.toml"
+
+# Generate worker/wrangler.toml (cron worker — weekly asset snapshot).
+mkdir -p worker
+cat > worker/wrangler.toml <<EOF
+name = "${PROJECT_NAME}-cron"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "$DB_NAME"
+database_id = "$DB_ID"
+
+[triggers]
+crons = ["0 17 * * 0"]
+EOF
+
+echo "Created worker/wrangler.toml"
 echo ""
 echo "Next steps:"
 echo "  npm run db:migrate       # Apply schema to remote DB"
 echo "  npm run db:migrate:local # Apply schema to local DB"
 echo "  npm run deploy           # Build and deploy to Cloudflare Pages"
+echo "  npm run worker:deploy    # Deploy the snapshot cron worker"

@@ -488,6 +488,83 @@ input:focus, select:focus, textarea:focus {
   flex-wrap: wrap;
 }
 
+/* Stacked area growth chart (src/pages/snapshots.js) */
+.snap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+.snap-control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.snap-control-label {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.snap-pill {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.snap-pill:hover { background: var(--border); }
+.snap-pill.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+.snap-pill.active:hover { opacity: 0.9; background: var(--primary); }
+
+.snap-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.snap-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.snap-axis-x, .snap-axis-y {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.snap-hover .snap-tooltip { opacity: 0; pointer-events: none; transition: opacity 0.1s; }
+.snap-hover:hover .snap-tooltip { opacity: 1; }
+.snap-tooltip-bg {
+  fill: var(--surface);
+  stroke: var(--border);
+}
+.snap-tooltip-text {
+  fill: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.snap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  font-size: 13px;
+}
+.snap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.snap-legend-line {
+  display: inline-block;
+  vertical-align: middle;
+}
+
 /* Empty state */
 .empty {
   text-align: center;

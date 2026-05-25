@@ -13,6 +13,8 @@
     "setup": "bash scripts/setup.sh",
     "db:migrate": "bash scripts/db.sh migrate",
     "db:migrate:remote": "bash scripts/db.sh migrate:remote",
+    "worker:dev": "wrangler dev --config worker/wrangler.toml --persist-to .wrangler/state --test-scheduled",
+    "worker:deploy": "wrangler deploy --config worker/wrangler.toml",
     "db:seed": "bash scripts/db.sh seed",
     "db:seed:remote": "bash scripts/db.sh seed:remote"
   },
