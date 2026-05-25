@@ -683,6 +683,53 @@ async function removeInstance(serviceId, instanceId) {
   });
 }
 
+function previewTopiBundle(rawData) {
+  const captures = Array.isArray(rawData?.captures)
+    ? rawData.captures
+    : [{ product_type_id: 6, response: rawData }];
+  const byPid = { 6: [], 7: [] };
+  for (const cap of captures) {
+    const pid = Number(cap.product_type_id);
+    if (!byPid[pid]) continue;
+    const payload = cap.response;
+    if (payload?.code !== 200) continue;
+    const products = payload.data?.Data?.ListProduct ?? [];
+    for (const product of products) {
+      for (const pp of (product.ProfileProducts ?? [])) {
+        if ((pp.TotalValue ?? 0) <= 0) continue;
+        byPid[pid].push({
+          name: (pp.ProductName || product.ProductName || '').slice(0, 40),
+          qty: pp.Quantity ?? 1,
+          totalValue: pp.TotalValue ?? 0,
+        });
+      }
+    }
+  }
+  return { deposit: byPid[6], gold: byPid[7] };
+}
+
+function renderTopiPreview({ deposit, gold }) {
+  const section = (label, items, qtyUnit) => {
+    if (!items.length) return '';
+    const total = items.reduce((s, i) => s + i.totalValue, 0);
+    const rows = items.map((i) => `
+      <li style="display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px solid var(--border);">
+        <span>${escapeHtml(i.name)}</span>
+        <span class="muted-sm">${qtyUnit && i.qty > 1 ? `${i.qty} ${qtyUnit} · ` : ''}${fmtVND(i.totalValue)}</span>
+      </li>`).join('');
+    return `
+      <div style="margin-top:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <strong>${label}</strong>
+          <span class="muted-sm">${items.length} mục · ${fmtVND(total)}</span>
+        </div>
+        <ul style="list-style:none; padding:0; margin:4px 0 0;">${rows}</ul>
+      </div>`;
+  };
+  const html = section('Tiền gửi', deposit, '') + section('Vàng', gold, 'chỉ');
+  return html || '<p class="muted-sm" style="margin-top:10px;">File không chứa dữ liệu hợp lệ.</p>';
+}
+
 function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
   openModal(`
     <h3>Import dữ liệu ${escapeHtml(def.label)}</h3>
@@ -695,29 +742,50 @@ function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
       <label class="full">File JSON
         <input type="file" name="file" accept="application/json,.json" required />
       </label>
-      <div class="modal-actions full">
+      <div id="import-preview" class="full" style="grid-column: 1 / -1;"></div>
+      <div class="modal-actions full" style="grid-column: 1 / -1;">
         <button type="button" class="secondary" id="cancel">Huỷ</button>
         <button type="submit">Import</button>
       </div>
     </form>
   `, (root) => {
+    const form = root.querySelector('#json-import-form');
+    const fileInput = form.file;
+    const preview = root.querySelector('#import-preview');
+    let parsedRaw = null;
+
     root.querySelector('#cancel').onclick = closeModal;
-    root.querySelector('#json-import-form').onsubmit = async (e) => {
-      e.preventDefault();
-      const file = e.target.file.files[0];
+
+    fileInput.onchange = async () => {
+      const file = fileInput.files[0];
+      preview.innerHTML = '';
+      parsedRaw = null;
       if (!file) return;
+      try {
+        parsedRaw = JSON.parse(await file.text());
+      } catch (err) {
+        preview.innerHTML = `<p class="muted-sm" style="color:var(--danger); margin-top:10px;">File JSON không hợp lệ: ${escapeHtml(err.message)}</p>`;
+        return;
+      }
+      if (serviceId === 'topi') {
+        preview.innerHTML = renderTopiPreview(previewTopiBundle(parsedRaw));
+      }
+    };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      if (!parsedRaw) { toast('Chọn file JSON trước'); return; }
       const assetTypes = [...card.querySelectorAll('.asset-type-check:checked')].map((c) => c.value);
       if (!assetTypes.length) { toast('Chọn ít nhất 1 loại tài sản'); return; }
       const submitBtn = e.target.querySelector('[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.classList.add('btn-loading');
       try {
-        const rawData = JSON.parse(await file.text());
         const res = await api.post('/sync', {
           service: serviceId,
           instance_id: instanceId,
           asset_types: assetTypes,
-          raw_data: rawData,
+          raw_data: parsedRaw,
         });
         toast(`Đã import: +${res.added} mới · ~${res.updated} cập nhật · -${res.removed} đóng`);
         closeModal();
