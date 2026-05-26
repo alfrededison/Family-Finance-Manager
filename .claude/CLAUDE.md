@@ -61,4 +61,4 @@ For multi-step tasks, state a brief plan:
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
 ## 5. Keep documentation up to date
-- If there are documentation files, update them if your code changes the behavior or usage of the code.
+- If there are documentation files (README, project_structure,...), update them if your code changes the behavior or usage of the code.
