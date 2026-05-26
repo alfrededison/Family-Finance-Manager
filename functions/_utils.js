@@ -19,58 +19,66 @@ export function nowISO() {
   return new Date().toISOString();
 }
 
-// Interest for bank / tiền gửi:
-//   principal × (rate/100) × years × (1 − tax)
-// Fixed-term (has maturity_date): uses full term (start → maturity).
-// Flexible (no maturity_date): uses elapsed time (start → today).
+// Interest = principal × (rate/100) × years × (1 − tax).
+// Years chosen by cycle rules:
+//   - has maturity + end_of_term: full period (start → maturity)
+//   - has maturity + monthly/quarterly: 1 cycle, capped by remaining-to-maturity
+//   - no maturity + monthly (or NULL): 1/12 year
+//   - no maturity + quarterly: 1/4 year
+//   - no maturity + end_of_term: falls back to monthly (no period defined)
+// NULL cycle ≡ end_of_term when has maturity, else monthly.
+function pickInterestYears(a) {
+  const cycle = a.interest_payment_cycle
+    || (a.maturity_date ? 'end_of_term' : 'monthly');
+
+  if (cycle === 'end_of_term' && a.start_date && a.maturity_date) {
+    const start = new Date(a.start_date);
+    const mat = new Date(a.maturity_date);
+    if (isNaN(start.getTime()) || isNaN(mat.getTime()) || mat <= start) return 0;
+    return (mat - start) / 86400000 / 365;
+  }
+
+  const cycleYears = cycle === 'quarterly' ? 0.25 : 1 / 12;
+
+  if (a.maturity_date) {
+    const mat = new Date(a.maturity_date);
+    if (!isNaN(mat.getTime())) {
+      const remain = (mat - Date.now()) / 86400000 / 365;
+      if (remain <= 0) return 0;
+      return Math.min(cycleYears, remain);
+    }
+  }
+  return cycleYears;
+}
+
+// PnL for bank / tiền gửi (savings accrual, with tax).
 export function computeAccrualPnl(a) {
   if (a.group_id !== 'bank' && a.group_id !== 'tien-gui') return 0;
   if (a.interest_rate == null || !a.start_date) return 0;
 
-  const start = new Date(a.start_date);
-  if (isNaN(start.getTime())) return 0;
+  const years = pickInterestYears(a);
+  if (years <= 0) return 0;
 
-  let end;
-  if (a.maturity_date) {
-    const mat = new Date(a.maturity_date);
-    end = isNaN(mat.getTime()) ? new Date() : mat;
-  } else {
-    end = new Date();
-  }
-  if (end < start) return 0;
-
-  const years = (end - start) / 86400000 / 365;
   const principal = a.group_id === 'bank' ? (a.current_price || 0) : (a.cost_price || 0);
   const taxRate = a.interest_tax_rate != null ? a.interest_tax_rate / 100 : 0;
-
   return principal * (a.interest_rate / 100) * years * (1 - taxRate);
 }
 
-// Forward-looking interest for cho-vay / đi-vay:
-//   - has start_date + maturity_date: full period interest = principal × rate × years
-//   - else: one month of interest = principal × rate / 12
+// Forward-looking interest for cho-vay / đi-vay (no tax).
 // Returns null when inputs are insufficient.
 export function computeLoanInterest(a) {
   if (a.interest_rate == null) return null;
   const principal = a.cost_price || 0;
   if (principal <= 0) return null;
-  const ratePct = a.interest_rate / 100;
 
-  if (a.start_date && a.maturity_date) {
-    const start = new Date(a.start_date);
-    const end = new Date(a.maturity_date);
-    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start) {
-      const years = (end - start) / 86400000 / 365;
-      return principal * ratePct * years;
-    }
-  }
-  return principal * ratePct / 12;
+  const years = pickInterestYears(a);
+  if (years <= 0) return 0;
+  return principal * (a.interest_rate / 100) * years;
 }
 
 // Returns { value, cost, pnl, pnlPct } for an asset row.
-// - Bank / tiền gửi: interest to maturity (if fixed-term) or accrued to today (if flexible).
-// - Cho vay / đi vay: forward-looking interest (monthly, or total to maturity).
-//   pnl = +interest (cho-vay) or −interest (đi-vay). cost equals value so the
+// - Bank / tiền gửi & cho vay / đi vay: forward-looking interest per pickInterestYears().
+//   For loans pnl = +interest (cho-vay) or −interest (đi-vay). cost equals value so the
 //   dashboard's value-cost rollup isn't polluted by remaining-balance changes.
 // - Everything else: qty × price diff.
 export function computeAssetMetrics(a) {

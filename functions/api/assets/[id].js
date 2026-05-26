@@ -4,7 +4,9 @@ const UPDATABLE_FIELDS = [
   'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
   'cost_price', 'current_price',
   'platform', 'term', 'maturity_date', 'bank',
-  'interest_rate', 'interest_tax_rate', 'start_date', 'notes', 'ticker', 'status',
+  'interest_rate', 'interest_tax_rate',
+  'interest_payment_day', 'interest_payment_cycle',
+  'start_date', 'notes', 'ticker', 'status',
 ];
 
 // PUT /api/assets/:id — partial update

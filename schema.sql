@@ -75,6 +75,11 @@ CREATE TABLE assets (
   -- Common
   interest_rate     REAL,
   interest_tax_rate REAL,            -- % tax withheld on interest (Tiền gửi: usually 5)
+  -- Cho vay / đi vay / tiền gửi: chu kỳ trả lãi (NULL ≡ end_of_term)
+  interest_payment_day   INTEGER,    -- 1..31
+  interest_payment_cycle TEXT
+                         CHECK (interest_payment_cycle IS NULL
+                                OR interest_payment_cycle IN ('end_of_term', 'monthly', 'quarterly')),
   start_date     TEXT,
   notes          TEXT,
   ticker         TEXT,

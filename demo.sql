@@ -86,17 +86,22 @@ VALUES (1, 'Đất Hà Đông', 'tich-tru', 'bds', 3, 100, 'm²', 15000000, 2000
 -- cho-vay/cho-vay-lau-dai → ALWAYS_ILLIQUID
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- cho-vay-nong: liquid, pnl dương, interest_rate + maturity_date hiện trong subInfoLine
+-- cho-vay-nong: cycle=monthly, day=30 → "Trả lãi tiếp theo: 2026-05-30"; pnl ≈ 1 tháng lãi
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    interest_rate, start_date, maturity_date, status, created_at, updated_at)
+                    interest_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, status, created_at, updated_at)
 VALUES (1, 'Cho vay Phước', 'cho-vay', 'cho-vay-nong', 1, 1, 'VND', 50000000, 50000000,
-        15, '2026-03-01', '2026-06-01', 'active', datetime('now'), datetime('now'));
+        15, 'monthly', 30,
+        '2026-03-01', '2026-06-01', 'active', datetime('now'), datetime('now'));
 
--- cho-vay-lau-dai: ALWAYS_ILLIQUID, current_price < cost_price (đã thu một phần)
+-- cho-vay-lau-dai: cycle=quarterly, anchor theo start_date (Jan) → next pay 2026-07-15; pnl ≈ 1 quý lãi
+-- ALWAYS_ILLIQUID, current_price < cost_price (đã thu một phần)
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    interest_rate, start_date, maturity_date, status, created_at, updated_at)
+                    interest_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, status, created_at, updated_at)
 VALUES (1, 'Cho vay anh Sơn', 'cho-vay', 'cho-vay-lau-dai', NULL, 1, 'VND', 200000000, 150000000,
-        8, '2025-01-01', '2027-01-01', 'active', datetime('now'), datetime('now'));
+        8, 'quarterly', 15,
+        '2025-01-01', '2027-01-01', 'active', datetime('now'), datetime('now'));
 
 -- cho-vay-nong: pnl=null (interest_rate IS NULL → computeLoanInterest trả null); subInfoLine trống
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price, status, created_at, updated_at)
@@ -108,17 +113,21 @@ VALUES (1, 'Bạn mượn tiền chữa bệnh', 'cho-vay', 'cho-vay-nong', 2, 1
 -- pnl = −lãi (âm); được tính vào totalLiability → summary bar hiện "Tài sản ròng"
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- tra-gop: pnl âm, member Vợ
+-- tra-gop: cycle=quarterly, day=5 → next pay 2026-07-05; pnl âm 1 quý lãi
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    interest_rate, start_date, maturity_date, status, created_at, updated_at)
+                    interest_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, status, created_at, updated_at)
 VALUES (1, 'Vay xe TCB', 'di-vay', 'tra-gop', 2, 1, 'VND', 500000000, 350000000,
-        9.5, '2024-06-01', '2027-06-01', 'active', datetime('now'), datetime('now'));
+        9.5, 'quarterly', 5,
+        '2024-07-01', '2027-07-01', 'active', datetime('now'), datetime('now'));
 
--- vay-lau-dai: khoản nợ lớn, không member
+-- vay-lau-dai: cycle=monthly, anchor Jan → next pay 2026-06-20; pnl âm 1 tháng lãi
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    interest_rate, start_date, maturity_date, status, created_at, updated_at)
+                    interest_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, status, created_at, updated_at)
 VALUES (1, 'Vay mua nhà VCB', 'di-vay', 'vay-lau-dai', NULL, 1, 'VND', 2000000000, 1800000000,
-        7.5, '2023-01-01', '2033-01-01', 'active', datetime('now'), datetime('now'));
+        7.5, 'monthly', 26,
+        '2023-01-01', '2033-01-01', 'active', datetime('now'), datetime('now'));
 
 -- vay-nong: pnl=null (interest_rate IS NULL), subInfoLine trống
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price, status, created_at, updated_at)
@@ -138,19 +147,23 @@ VALUES (1, 'Mượn anh A', 'di-vay', 'vay-nong', 1, 1, 'VND', 20000000, 2000000
 --   mat < 0d:   liquid, badge neg  "Quá hạn: Nd"
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- tg-co-dinh: illiquid (mat 2026-07-01 = 43d > 30); platform + term + rate trong subInfoLine; không chip
+-- tg-co-dinh: cycle=end_of_term (mặc định) → pnl = lãi cả kỳ 6 tháng; không hiện "next pay"
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    platform, interest_rate, interest_tax_rate, start_date, maturity_date, term,
+                    platform, interest_rate, interest_tax_rate, interest_payment_cycle,
+                    start_date, maturity_date, term,
                     status, created_at, updated_at)
 VALUES (1, 'TG TCB 6 tháng', 'tien-gui', 'tg-co-dinh', 1, 1, 'VND', 300000000, 300000000,
-        'Topi', 5.5, 5, '2026-01-01', '2026-07-01', '6', 'active', datetime('now'), datetime('now'));
+        'Topi', 5.5, 5, 'end_of_term',
+        '2026-01-01', '2026-07-01', '6', 'active', datetime('now'), datetime('now'));
 
--- tg-linh-hoat: liquid (không maturity_date); platform Momo
+-- tg-linh-hoat: không kỳ hạn + cycle=monthly, day=1 → next pay 2026-06-01; pnl = 1 tháng lãi
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    platform, interest_rate, interest_tax_rate, start_date,
+                    platform, interest_rate, interest_tax_rate, interest_payment_cycle, interest_payment_day,
+                    start_date,
                     status, created_at, updated_at)
 VALUES (1, 'TG linh hoạt', 'tien-gui', 'tg-linh-hoat', NULL, 1, 'VND', 100000000, 100000000,
-        'Momo', 4.0, 5, '2026-01-01', 'active', datetime('now'), datetime('now'));
+        'Momo', 4.0, 5, 'monthly', 1,
+        '2026-01-01', 'active', datetime('now'), datetime('now'));
 
 -- tg-co-dinh QUÁ HẠN: mat 2026-05-10 (9d trước) → badge neg "Quá hạn: 9 ngày"; liquid (daysLeft<0 ≤ 30)
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
@@ -166,12 +179,16 @@ INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost
 VALUES (1, 'TG ACB đáo hạn hôm nay', 'tien-gui', 'tg-co-dinh', NULL, 1, 'VND', 80000000, 80000000,
         6.0, 5, '2025-11-19', '2026-05-19', '6', 'active', datetime('now'), datetime('now'));
 
--- tg-co-dinh SẮP ĐÁO HẠN: mat 2026-05-21 (daysLeft=2 ≤ 3) → badge warn "Sắp đáo hạn: 2 ngày"; liquid
+-- tg-co-dinh SẮP ĐÁO HẠN: cycle=monthly, day=21 → demo cap lãi theo còn-lại-tới-đáo-hạn
+--   mat 2026-05-21 (daysLeft=2 ≤ 3) → badge warn "Sắp đáo hạn: 2 ngày"; liquid
+--   pnl = min(1/12 năm, ~2 ngày) → lãi rất nhỏ (cap by remain)
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    platform, interest_rate, interest_tax_rate, start_date, maturity_date, term,
+                    platform, interest_rate, interest_tax_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, term,
                     status, created_at, updated_at)
 VALUES (1, 'TG Zalopay sắp đáo hạn', 'tien-gui', 'tg-co-dinh', 3, 1, 'VND', 100000000, 100000000,
-        'Zalopay', 5.8, 5, '2025-11-21', '2026-05-21', '6', 'active', datetime('now'), datetime('now'));
+        'Zalopay', 5.8, 5, 'monthly', 21,
+        '2025-11-21', '2026-05-21', '6', 'active', datetime('now'), datetime('now'));
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- GROUP: bank / Bank
@@ -187,12 +204,17 @@ INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost
 VALUES (1, 'Lương TCB', 'bank', 'tk-tu-do', 1, 1, 'VND', 0, 25000000,
         'TCB', 0.1, '2020-01-01', '19001234567', 'active', datetime('now'), datetime('now'));
 
--- so-tiet-kiem: MATURITY_ILLIQUID (mat 2026-08-01 = 74d > 30); bank=VCB; term + rate trong subInfoLine; không chip
+-- so-tiet-kiem: cycle=quarterly, day=15, anchor theo start_date (Feb → mod 3 = 2) → next pay 2026-08-15
+--   nhưng > mat 2026-08-01 → trả về null → không hiện "next pay"
+--   pnl = min(1/4 năm, remain~67d) → ~67d (cap by remain)
+--   MATURITY_ILLIQUID (mat 2026-08-01 = 74d > 30); bank=VCB
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price,
-                    bank, interest_rate, interest_tax_rate, start_date, maturity_date, term, notes,
+                    bank, interest_rate, interest_tax_rate, interest_payment_cycle, interest_payment_day,
+                    start_date, maturity_date, term, notes,
                     status, created_at, updated_at)
 VALUES (1, 'Sổ TK VCB 6 tháng', 'bank', 'so-tiet-kiem', 2, 1, 'VND', 100000000, 100000000,
-        'VCB', 6.0, 5, '2026-02-01', '2026-08-01', '6', '1234567890',
+        'VCB', 6.0, 5, 'quarterly', 15,
+        '2026-02-01', '2026-08-01', '6', '1234567890',
         'active', datetime('now'), datetime('now'));
 
 -- tk-tu-do: không member; không interest_rate/start_date → pnl=0, cost=value → cost KHÔNG hiện dòng phụ

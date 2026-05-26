@@ -67,6 +67,7 @@ export async function renderAssets(view) {
         <select id="f-sort">
           <option value="id-desc"      ${initSort === 'id-desc'      ? 'selected' : ''}>Mặc định</option>
           <option value="maturity-asc" ${initSort === 'maturity-asc' ? 'selected' : ''}>Đáo hạn sớm nhất</option>
+          <option value="next-pay-asc" ${initSort === 'next-pay-asc' ? 'selected' : ''}>Trả lãi gần nhất</option>
           <option value="value-desc"   ${initSort === 'value-desc'   ? 'selected' : ''}>Giá trị cao nhất</option>
           <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
         </select>
@@ -173,7 +174,9 @@ export async function renderAssets(view) {
 function sortAssets(assets, sortBy) {
   const copy = [...assets];
   const matKey = (a) => a.maturity_date || '9999-99-99';
+  const nextPayKey = (a) => nextInterestPaymentDate(a) || '9999-99-99';
   if (sortBy === 'maturity-asc') return copy.sort((a, b) => matKey(a).localeCompare(matKey(b)));
+  if (sortBy === 'next-pay-asc') return copy.sort((a, b) => nextPayKey(a).localeCompare(nextPayKey(b)));
   if (sortBy === 'value-desc')   return copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   if (sortBy === 'pnl-desc')     return copy.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity));
   return copy;
@@ -370,10 +373,62 @@ function subInfoLine(a) {
   if (notes) bits.push(notes);
   const textPart = bits.map(escapeHtml).join(' · ');
   const datePart = a.maturity_date ? `Đáo hạn: ${escapeHtml(a.maturity_date)}` : '';
-  const chip = maturityChip(a.maturity_date);
-  const parts = [textPart, datePart].filter(Boolean).join(' · ');
-  if (!parts && !chip) return '';
-  return `<div class="muted-sm">${parts}${parts && chip ? ' ' : ''}${chip}</div>`;
+  const nextPay = nextInterestPaymentDate(a);
+  const nextPart = nextPay ? `Trả lãi tiếp theo: ${escapeHtml(nextPay)}` : '';
+  const chips = [maturityChip(a.maturity_date), interestPaymentChip(a, nextPay)].filter(Boolean).join(' ');
+  const parts = [textPart, datePart, nextPart].filter(Boolean).join(' · ');
+  if (!parts && !chips) return '';
+  return `<div class="muted-sm">${parts}${parts && chips ? ' ' : ''}${chips}</div>`;
+}
+
+function interestPaymentChip(a, nextPay) {
+  if (!nextPay) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(nextPay);
+  d.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((d - today) / 86400000);
+  if (diffDays < 0 || diffDays > maturityWarnDays) return '';
+  const isPay = a.group_id === 'di-vay';
+  const action = isPay ? 'trả lãi' : 'nhận lãi';
+  const Action = isPay ? 'Trả lãi' : 'Nhận lãi';
+  if (diffDays === 0) {
+    return `<span class="badge ${isPay ? 'warn' : 'pos'}">${Action} hôm nay</span>`;
+  }
+  return `<span class="badge warn">Sắp ${action}: ${diffDays} ngày</span>`;
+}
+
+function nextInterestPaymentDate(a) {
+  const cycle = a.interest_payment_cycle;
+  if (cycle !== 'monthly' && cycle !== 'quarterly') return null;
+  const day = Number(a.interest_payment_day);
+  if (!day || day < 1 || day > 31) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const step = cycle === 'monthly' ? 1 : 3;
+
+  // Quarterly aligns to start_date's month (mod 3); monthly accepts any month.
+  let anchorMod = 0;
+  if (cycle === 'quarterly' && a.start_date) {
+    const s = new Date(a.start_date);
+    if (!isNaN(s.getTime())) anchorMod = s.getMonth() % 3;
+  }
+  const mat = a.maturity_date ? new Date(a.maturity_date) : null;
+  const matValid = mat && !isNaN(mat.getTime());
+
+  for (let i = 0; i < 24; i++) {
+    const probe = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    if (probe.getMonth() % step !== anchorMod) continue;
+    const lastDay = new Date(probe.getFullYear(), probe.getMonth() + 1, 0).getDate();
+    const d = new Date(probe.getFullYear(), probe.getMonth(), Math.min(day, lastDay));
+    if (d < today) continue;
+    if (matValid && d > mat) return null;
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mo}-${da}`;
+  }
+  return null;
 }
 
 function bindRowActions(assets, members, reload) {
@@ -595,6 +650,7 @@ function formChoVay(subtypes, members, asset) {
     <label>Ngày đáo hạn
       <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
     </label>
+    ${fragInterestPayment(a)}
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />
     ${fragNotes(a)}
@@ -626,11 +682,31 @@ function formDiVay(subtypes, members, asset) {
     <label>Ngày đáo hạn
       <input name="maturity_date" type="date" value="${escapeHtml(a.maturity_date || '')}" />
     </label>
+    ${fragInterestPayment(a)}
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />
     ${fragNotes(a)}
     ${fragActions(!!asset)}
   </form>`;
+}
+
+function fragInterestPayment(a, { attr = '' } = {}) {
+  const cycle = a.interest_payment_cycle || 'end_of_term';
+  const opts = [
+    ['end_of_term', 'Cuối kỳ'],
+    ['monthly',     'Hằng tháng'],
+    ['quarterly',   'Hằng quý'],
+  ].map(([v, label]) =>
+    `<option value="${v}" ${cycle === v ? 'selected' : ''}>${label}</option>`
+  ).join('');
+  return `
+    <label ${attr}>Chu kỳ trả lãi
+      <select name="interest_payment_cycle">${opts}</select>
+    </label>
+    <label ${attr}>Ngày trả lãi (1-31)
+      <input name="interest_payment_day" type="number" min="1" max="31"
+             value="${a.interest_payment_day ?? ''}" />
+    </label>`;
 }
 
 // ─── Tiền gửi ──────────────────────────────────────────────────────────────
@@ -663,6 +739,7 @@ function formTienGui(subtypes, platforms, members, asset) {
     <label>Kỳ hạn (tháng)
       <input name="term" type="number" min="1" step="1" data-term-trio="term" value="${escapeHtml(a.term || '')}" />
     </label>
+    ${fragInterestPayment(a)}
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="unit" value="VND" />
     ${fragNotes(a)}
@@ -700,6 +777,7 @@ function formBank(subtypes, members, asset) {
     <label data-bank-savings>Kỳ hạn (tháng)
       <input name="term" type="number" min="1" step="1" data-term-trio="term" value="${escapeHtml(a.term || '')}" />
     </label>
+    ${fragInterestPayment(a, { attr: 'data-bank-savings' })}
     <input type="hidden" name="qty" value="1" />
     <input type="hidden" name="cost_price" value="${a.cost_price ?? 0}" />
     <input type="hidden" name="unit" value="VND" />
@@ -810,6 +888,8 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
     if (groupId === 'bank' && body.subtype !== BANK_SAVINGS_SUBTYPE) {
       body.maturity_date = null;
       body.term = null;
+      body.interest_payment_cycle = null;
+      body.interest_payment_day = null;
     }
 
     try {
