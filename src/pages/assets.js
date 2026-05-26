@@ -9,6 +9,10 @@ const MONEY_FIELDS = ['cost_price', 'current_price'];
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
 const PAGE_SIZE = 20;
 
+// "Sắp đáo hạn: N ngày" chip threshold. Synced from user-setting
+// `notify.maturity_days_ahead` (default 3) on page load.
+let maturityWarnDays = 3;
+
 export async function renderAssets(view) {
   const hashQuery = window.location.hash.split('?')[1] || '';
   const urlParams = new URLSearchParams(hashQuery);
@@ -34,10 +38,12 @@ export async function renderAssets(view) {
     return (await api.get('/assets?' + p.toString())).map(enrichAsset);
   };
 
-  const [rawAll, members] = await Promise.all([
+  const [rawAll, members, userSettings] = await Promise.all([
     fetchAssets(initQ, initGroup, initMember),
     api.get('/members'),
+    api.get('/user-settings'),
   ]);
+  maturityWarnDays = Number(userSettings['notify.maturity_days_ahead']) || 3;
 
   const allAssets = initSubtype ? rawAll.filter((a) => a.subtype === initSubtype) : rawAll;
   const assets = applyAvailableFilter(allAssets, initAvailable);
@@ -359,7 +365,7 @@ function maturityChip(maturityDate) {
   const diffDays = Math.round((mat - today) / 86400000);
   if (diffDays < 0) return `<span class="badge neg">Quá hạn: ${Math.abs(diffDays)} ngày</span>`;
   if (diffDays === 0) return `<span class="badge pos">Đáo hạn hôm nay</span>`;
-  if (diffDays <= 3) return `<span class="badge warn">Sắp đáo hạn: ${diffDays} ngày</span>`;
+  if (diffDays <= maturityWarnDays) return `<span class="badge warn">Sắp đáo hạn: ${diffDays} ngày</span>`;
   return '';
 }
 

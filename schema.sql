@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS price_history;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
+DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS user_settings;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS sessions;
@@ -38,6 +39,20 @@ CREATE TABLE user_settings (
   value   TEXT    NOT NULL,
   PRIMARY KEY (user_id, key)
 );
+
+-- Web Push subscriptions (one row per device per user).
+CREATE TABLE push_subscriptions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint     TEXT    NOT NULL,
+  p256dh       TEXT    NOT NULL,            -- base64url, 65-byte uncompressed pubkey
+  auth         TEXT    NOT NULL,            -- base64url, 16-byte auth secret
+  label        TEXT,                        -- user-agent fragment for display
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  last_used_at TEXT
+);
+CREATE UNIQUE INDEX uq_push_user_endpoint ON push_subscriptions(user_id, endpoint);
+CREATE INDEX idx_push_user ON push_subscriptions(user_id);
 
 CREATE TABLE members (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

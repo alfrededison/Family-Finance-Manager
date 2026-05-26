@@ -9,6 +9,9 @@ export async function onRequestGet({ env }) {
     for (const { key, value } of (rows.results || [])) {
       try { result[key] = JSON.parse(value); } catch { result[key] = value; }
     }
+    // VAPID public key is sourced from the env (single source of truth).
+    // Surviving schema resets matters because /api/push/subscribe reads this.
+    if (env.VAPID_PUBLIC_KEY) result['notify.vapid_public_key'] = env.VAPID_PUBLIC_KEY;
     return json(result);
   } catch (err) {
     return error(err.message, 500);

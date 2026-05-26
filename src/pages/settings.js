@@ -110,6 +110,14 @@ export async function renderSettings(view) {
     </div>
 
     <div class="section">
+      <h2>🔔 Thông báo nhắc nhở</h2>
+      <p class="muted-sm" style="margin: -8px 0 12px;">
+        Nhắc hằng ngày khi có tài sản sắp đáo hạn, đến ngày nhận lãi (cho vay) hoặc trả lãi (đi vay).
+      </p>
+      <div id="notify-section"></div>
+    </div>
+
+    <div class="section">
       <h2>Ứng dụng</h2>
       <p class="muted-sm" style="margin: -8px 0 12px;">Kiểm tra và áp dụng phiên bản mới nhất của ứng dụng.</p>
       <p class="muted-sm" style="margin: -4px 0 12px; font-family: monospace;">
@@ -130,6 +138,7 @@ export async function renderSettings(view) {
   await reloadPlatforms();
   await reloadMarketSettings();
   await reloadIntegrations();
+  await reloadNotifySection();
 
   document.getElementById('btn-new-member').onclick = () => openMemberModal();
 
@@ -1037,4 +1046,133 @@ function openBookmarkletModal(serviceId, def) {
   `, (root) => {
     root.querySelector('#bm-close').onclick = closeModal;
   });
+}
+
+// ─── Push notifications ───────────────────────────────────────────────────────
+
+async function reloadNotifySection() {
+  const container = document.getElementById('notify-section');
+  if (!container) return;
+
+  const [globalSettings, userSettings] = await Promise.all([
+    api.get('/settings'),
+    api.get('/user-settings'),
+  ]);
+  const vapidKey  = globalSettings['notify.vapid_public_key'];
+  const daysAhead = userSettings['notify.maturity_days_ahead'] ?? 3;
+
+  let status = 'unsupported';
+  let endpoint = null;
+  if ('serviceWorker' in navigator && 'PushManager' in window) {
+    status = Notification.permission === 'granted' ? 'maybe' : Notification.permission;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) { status = 'subscribed'; endpoint = sub.endpoint; }
+    } catch {}
+  }
+  if (!vapidKey && status !== 'subscribed') status = 'no_vapid';
+
+  const badge = ({
+    unsupported: '<span class="badge neg">Trình duyệt không hỗ trợ</span>',
+    denied:      '<span class="badge neg">Đã bị chặn</span>',
+    no_vapid:    '<span class="badge neg">Server chưa cấu hình</span>',
+    default:     '<span class="badge">Chưa bật</span>',
+    maybe:       '<span class="badge">Chưa đăng ký</span>',
+    subscribed:  '<span class="badge pos">Đang bật</span>',
+  })[status] || '';
+
+  const actionBtn = status === 'subscribed'
+    ? '<button type="button" id="btn-push-off" class="small">Tắt</button>'
+    : (['unsupported', 'denied', 'no_vapid'].includes(status) ? ''
+      : '<button type="button" id="btn-push-on" class="small">Bật thông báo</button>');
+
+  container.innerHTML = `
+    <div class="provider-row">
+      <span>Trạng thái</span>
+      <span>${badge}</span>
+      ${actionBtn}
+    </div>
+    <div class="provider-row">
+      <label for="notify-days">Nhắc trước (ngày)</label>
+      <input type="number" id="notify-days" value="${escapeHtml(String(daysAhead))}" min="1" max="60" style="width:90px;" />
+      <button type="button" id="btn-save-days" class="small">Lưu</button>
+    </div>
+    <div class="toolbar" style="margin-top:8px;">
+      <button type="button" id="btn-push-test" class="small secondary"
+        ${status === 'subscribed' ? '' : 'disabled'}>📨 Gửi thử</button>
+    </div>
+    ${status === 'no_vapid' ? '<p class="muted-sm">VAPID key chưa được cấu hình trên server. Liên hệ admin để bật tính năng.</p>' : ''}
+  `;
+
+  document.getElementById('btn-push-on') ?.addEventListener('click', () => subscribePush(vapidKey));
+  document.getElementById('btn-push-off')?.addEventListener('click', () => unsubscribePush(endpoint));
+  document.getElementById('btn-push-test')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-push-test');
+    btn.disabled = true; btn.classList.add('btn-loading');
+    try {
+      const r = await api.post('/push/test', {});
+      toast(`Đã gửi ${r.sent ?? 0} thông báo${r.failed ? `, ${r.failed} lỗi` : ''}`);
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    } finally {
+      btn.disabled = false; btn.classList.remove('btn-loading');
+    }
+  });
+  document.getElementById('btn-save-days').onclick = async () => {
+    const v = Number(document.getElementById('notify-days').value) || 3;
+    try {
+      await api.post('/user-settings', { key: 'notify.maturity_days_ahead', value: v });
+      toast('Đã lưu ngưỡng nhắc');
+    } catch (err) {
+      toast('Lỗi: ' + err.message);
+    }
+  };
+}
+
+async function subscribePush(vapidPublicKey) {
+  if (!vapidPublicKey) { toast('Thiếu VAPID key trên server'); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Bạn đã từ chối thông báo'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+    const j = sub.toJSON();
+    await api.post('/push/subscribe', {
+      endpoint: j.endpoint,
+      keys:     j.keys,
+      label:    navigator.userAgent.slice(0, 120),
+    });
+    toast('Đã bật thông báo');
+    await reloadNotifySection();
+  } catch (err) {
+    toast('Lỗi: ' + err.message);
+  }
+}
+
+async function unsubscribePush(endpoint) {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    if (endpoint) {
+      await api.del('/push/subscribe?endpoint=' + encodeURIComponent(endpoint));
+    }
+    toast('Đã tắt thông báo');
+    await reloadNotifySection();
+  } catch (err) {
+    toast('Lỗi: ' + err.message);
+  }
+}
+
+function urlBase64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
 }

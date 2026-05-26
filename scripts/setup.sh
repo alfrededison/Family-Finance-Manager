@@ -75,7 +75,10 @@ database_name = "$DB_NAME"
 database_id = "$DB_ID"
 
 [triggers]
-crons = ["0 17 * * 0"]
+crons = [
+  "0 17 * * 0",   # Weekly snapshot — Sunday 17:00 UTC
+  "0 1 * * *",    # Daily maturity/interest reminder — 01:00 UTC = 08:00 Vietnam
+]
 EOF
 
 echo "Created worker/wrangler.toml"

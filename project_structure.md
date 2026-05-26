@@ -11,17 +11,18 @@ metadata:
 
 - **Frontend**: Vanilla JavaScript + Vite (không dùng React/Vue)
 - **Backend**: Cloudflare Pages Functions (`functions/api/*`) — gated bởi `functions/_middleware.js`
-- **Cron Worker**: Cloudflare Worker riêng (`worker/index.js`) — chạy weekly snapshot (cron `0 17 * * 0`)
+- **Cron Worker**: Cloudflare Worker riêng (`worker/index.js`) — 2 schedules: weekly snapshot (`0 17 * * 0`) + daily push notification (`0 1 * * *`), dispatched theo `event.cron`
 - **Database**: Cloudflare D1 (SQLite), binding `DB`, db `finance-db`
 - **Auth**: Self-hosted email + password. PBKDF2-SHA256 (600k iter) qua Web Crypto. Session cookie `sid` (HttpOnly, Secure, SameSite=Lax, 30 ngày sliding refresh) lưu trong bảng `sessions`.
+- **Push Notifications**: Self-hosted Web Push API. VAPID JWT (RFC 8292, ES256) + `aes128gcm` payload encryption (RFC 8291) implement trực tiếp trên Web Crypto trong `functions/_push.js` — không phụ thuộc npm `web-push`. Secrets: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` set trên cả Worker và Pages.
 - **Build**: Vite, root `src/`, output `dist/`
 - **Deploy**: Cloudflare Pages (`wrangler pages deploy dist`) + Worker (`wrangler deploy --config worker/wrangler.toml`)
-- **PWA**: Service worker (`public/sw.js`), cache key `finance-shell-<git-sha>`. Chỉ cache shell + static — **không cache `/api/*`** (per-user, auth-gated). Logout xoá toàn bộ caches.
+- **PWA**: Service worker (`public/sw.js`), cache key `finance-shell-<git-sha>`. Chỉ cache shell + static — **không cache `/api/*`** (per-user, auth-gated). Có thêm `push` + `notificationclick` handlers (read payload trực tiếp, navigate đến `data.url`). Logout xoá toàn bộ caches.
 - **UI language**: Tiếng Việt
 
 ## Tenancy Model
 
-Mỗi user có dữ liệu riêng. Các bảng per-user (`members`, `assets`, `asset_snapshots`, `user_settings`) đều có cột `user_id`. Các bảng global (`platforms`, `settings` cho market provider config) shared giữa users. `price_history` inherit tenancy qua `assets.user_id` (không có cột riêng).
+Mỗi user có dữ liệu riêng. Các bảng per-user (`members`, `assets`, `asset_snapshots`, `user_settings`, `push_subscriptions`) đều có cột `user_id`. Các bảng global (`platforms`, `settings` cho market provider config + VAPID public key) shared giữa users. `price_history` inherit tenancy qua `assets.user_id` (không có cột riêng). `push_subscriptions` dùng composite `UNIQUE(user_id, endpoint)` — cùng device có thể subscribe dưới nhiều user khác nhau.
 
 ## File Layout
 
@@ -50,6 +51,8 @@ appscript/
 │   ├── _auth.js                  # hashPassword, verifyPassword, createSession, getSessionUser, cookie helpers
 │   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login, signup gated bởi env.ALLOW_SIGNUP)
 │   ├── _snapshot.js              # runSnapshot(env, { userId }) — yêu cầu userId
+│   ├── _notify.js                # buildNotificationSummary(env, userId) + nextInterestPaymentDate(asset)
+│   ├── _push.js                  # VAPID JWT + aes128gcm encryption + sendUserNotification / sendDailyNotificationForUser
 │   └── api/
 │       ├── _providers.js         # fetchAllProviders(env, userId?) — userId optional (UI scoped, cron global)
 │       ├── auth/
@@ -58,7 +61,10 @@ appscript/
 │       │   ├── logout.js         # POST — destroy session, clear cookie
 │       │   ├── me.js             # GET — current user (401 nếu chưa login)
 │       │   └── password.js       # POST — đổi mật khẩu, invalidate other sessions
-│       ├── user-settings.js      # GET/POST per-user K/V (integrations sống ở đây)
+│       ├── push/
+│       │   ├── subscribe.js      # POST upsert / DELETE per (user_id, endpoint)
+│       │   └── test.js           # POST — gửi thử notification cho current user
+│       ├── user-settings.js      # GET/POST per-user K/V (integrations + notify prefs sống ở đây)
 │       ├── price-history.js
 │       ├── assets.js
 │       ├── assets/[id].js
@@ -74,17 +80,18 @@ appscript/
 │       ├── snapshots/run.js      # Manual snapshot trigger (POST, per-user)
 │       └── market-data/fetch.js  # UI fetch (scoped tới caller); cron không dùng route này
 ├── worker/                       # Standalone Cloudflare Worker for cron
-│   ├── index.js                  # scheduled() → fetchAllProviders(env) một lần → loop users → runSnapshot per user
-│   └── wrangler.toml             # Weekly cron trigger
+│   ├── index.js                  # scheduled() dispatch theo event.cron: weekly snapshot + daily push notify
+│   └── wrangler.toml             # 2 cron triggers (weekly + daily)
 ├── public/
 │   ├── manifest.webmanifest      # PWA manifest
-│   ├── sw.js                     # Service worker — KHÔNG cache /api/*
+│   ├── sw.js                     # Service worker — KHÔNG cache /api/*; có push + notificationclick handlers
 │   ├── favicon.ico, favicon-32.png
 │   ├── apple-touch-icon.png
 │   └── icon-{192,512,maskable}.png
 ├── scripts/
 │   ├── db.sh                     # migrate / migrate:remote / seed
 │   ├── setup.sh                  # Initial setup
+│   ├── generate-vapid.sh         # Sinh VAPID keypair (ECDH P-256 → base64url) cho Web Push
 │   └── generate-icons.sh         # Build PWA icons from base_logo.png
 ├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, price_history, settings, asset_snapshots)
 ├── demo.sql                      # Seed / initial data — demo có 1 user (demo@example.com / demo1234)
@@ -130,7 +137,8 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 4. Giá thị trường (market provider config — global, dùng `/api/settings`)
 5. 🔗 Tích hợp dịch vụ (TCBS/Topi instances — per-user, dùng `/api/user-settings`)
 6. Sao lưu & phục hồi (JSON export/import per-user)
-7. Ứng dụng (force reload phiên bản mới nhất)
+7. 🔔 Thông báo nhắc nhở (subscribe push, ngưỡng nhắc trước N ngày, gửi thử — per-user)
+8. Ứng dụng (force reload phiên bản mới nhất)
 
 ## NPM Scripts
 
@@ -143,3 +151,17 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 ## Asset Snapshots
 
 Bảng `asset_snapshots` lưu tổng giá trị theo `(user_id, snapshot_date, group_id, subtype)` — UNIQUE bucket per user. Cron worker chạy weekly (Chủ nhật 17:00 UTC): `fetchAllProviders(env)` (gọi 1 lần, update tất cả users' assets trong bulk SQL) → loop users `runSnapshot(env, { userId })`. Có thể trigger thủ công per-user qua `POST /api/snapshots/run` hoặc trigger global qua `POST http://localhost:8787/` khi chạy `worker:dev`.
+
+## Push Notifications
+
+Cron daily (`0 1 * * *` = 08:00 Vietnam) loop từng user → `sendDailyNotificationForUser(env, userId)`:
+
+1. `buildNotificationSummary(env, userId)` đọc ngưỡng `notify.maturity_days_ahead` (per-user, default 3) → query 2 nhóm:
+   - Assets có `maturity_date` rơi trong cửa sổ `[today, today+N]`.
+   - Loans (`cho-vay`/`di-vay`) có `interest_payment_day` set, compute `nextInterestPaymentDate()` (anchor `start_date`, walk forward theo cycle `monthly`/`quarterly`), include nếu daysOut ≤ N.
+2. Nếu summary có item → encrypt payload `{title, body, url}` với aes128gcm cho từng row trong `push_subscriptions` của user, POST tới `endpoint` kèm VAPID JWT.
+3. Endpoint trả 404/410 → row tự xoá. 200/201/202 → bump `last_used_at`.
+
+VAPID public key đọc trực tiếp từ `env.VAPID_PUBLIC_KEY` trong `/api/settings` (Pages secret) — không lưu DB để khỏi bị wipe khi reset schema. Private key chỉ tồn tại dưới dạng worker/Pages secret.
+
+Test thủ công: `POST /api/push/test` (per-user, qua middleware) hoặc `POST http://localhost:8787/notify` (tất cả users, qua worker dev).

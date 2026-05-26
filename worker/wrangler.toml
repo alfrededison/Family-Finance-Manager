@@ -8,4 +8,7 @@ database_name = "finance-db"
 database_id = "588ecb08-91d4-4f93-9f65-990306bc48fa"
 
 [triggers]
-crons = ["0 17 * * 7"]
+crons = [
+  "0 17 * * 7",   # Weekly snapshot — Saturday 17:00 UTC = Sunday 00:00 Vietnam
+  "0 1 * * *",    # Daily maturity/interest reminder — 01:00 UTC = 08:00 Vietnam
+]

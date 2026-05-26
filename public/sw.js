@@ -19,6 +19,36 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  let payload;
+  try { payload = event.data.json(); } catch { return; }
+  const { title = '🔔 Thông báo', body = '', url = '/' } = payload;
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon:  '/icon-192.png',
+    badge: '/icon-192.png',
+    data:  { url },
+    tag:   payload.tag || 'maturity-daily',
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || '/';
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if (new URL(c.url).origin === self.location.origin) {
+        c.focus();
+        c.navigate(target).catch(() => {});
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  })());
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
