@@ -3,7 +3,7 @@ import { renderAssets } from './pages/assets.js';
 import { renderPriceHistory } from './pages/price-history.js';
 import { renderSnapshots } from './pages/snapshots.js';
 import { renderSettings } from './pages/settings.js';
-import { api } from './api.js';
+import { renderLogin } from './pages/login.js';
 
 const routes = {
   dashboard: renderDashboard,
@@ -15,12 +15,19 @@ const routes = {
 
 const view = document.getElementById('view');
 
+let currentUser = null;
+export function getCurrentUser() { return currentUser; }
+
 function currentRoute() {
   const hash = window.location.hash.replace(/^#\//, '').split('?')[0];
   return routes[hash] ? hash : 'dashboard';
 }
 
 async function router() {
+  if (!currentUser) {
+    renderLogin(view);
+    return;
+  }
   const route = currentRoute();
   document.querySelectorAll('.sidebar a, .bottom-nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
@@ -93,7 +100,53 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-router();
+// ────────────────────────────────────────────────────────────────────────────
+// Bootstrap: check session before rendering the app shell.
+// ────────────────────────────────────────────────────────────────────────────
+
+function setShellVisible(visible) {
+  document.body.classList.toggle('auth-only', !visible);
+}
+
+function renderUserChip() {
+  const el = document.getElementById('sidebar-user');
+  if (!el || !currentUser) return;
+  el.querySelector('.user-name').textContent = currentUser.name;
+  el.querySelector('.user-email').textContent = currentUser.email;
+  const btn = el.querySelector('#btn-logout');
+  btn.onclick = logout;
+}
+
+export async function logout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  } catch {}
+  // Purge all caches so the next user can't see stale per-user API responses.
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  }
+  currentUser = null;
+  window.location.hash = '#/';
+  window.location.reload();
+}
+
+async function bootstrap() {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include' });
+    if (res.ok) {
+      currentUser = await res.json();
+      setShellVisible(true);
+      renderUserChip();
+      router();
+      return;
+    }
+  } catch {}
+  setShellVisible(false);
+  renderLogin(view);
+}
+
+bootstrap();
 
 export function toast(msg, action) {
   const el = document.getElementById('toast');

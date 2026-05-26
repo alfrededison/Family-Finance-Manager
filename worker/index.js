@@ -2,8 +2,23 @@ import { runSnapshot } from '../functions/_snapshot.js';
 import { fetchAllProviders } from '../functions/api/_providers.js';
 
 async function refreshAndSnapshot(env) {
-  await fetchAllProviders(env);
-  return runSnapshot(env);
+  // Fetch providers ONCE globally — the same HTTP responses apply to every user's
+  // assets. Asset updates in fetchAllProviders run without a user_id filter, so
+  // all users' assets get repriced in single SQL statements.
+  const providers = await fetchAllProviders(env);
+
+  const { results: users } = await env.DB.prepare('SELECT id FROM users').all();
+  const userResults = [];
+  for (const { id: userId } of (users || [])) {
+    try {
+      const snap = await runSnapshot(env, { userId });
+      userResults.push({ userId, ok: true, ...snap });
+    } catch (err) {
+      userResults.push({ userId, ok: false, error: err.message });
+    }
+  }
+
+  return { providers, users: userResults };
 }
 
 export default {

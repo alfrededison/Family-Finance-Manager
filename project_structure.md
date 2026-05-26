@@ -1,6 +1,6 @@
 ---
 name: project-structure
-description: "Cấu trúc tổng thể dự án appscript — tech stack, file layout, routing, backend, PWA, cron worker"
+description: "Cấu trúc tổng thể dự án appscript — tech stack, file layout, routing, backend, PWA, cron worker, multi-user auth"
 metadata: 
   node_type: memory
   type: project
@@ -10,29 +10,35 @@ metadata:
 ## Tech Stack
 
 - **Frontend**: Vanilla JavaScript + Vite (không dùng React/Vue)
-- **Backend**: Cloudflare Pages Functions (`functions/api/*`)
+- **Backend**: Cloudflare Pages Functions (`functions/api/*`) — gated bởi `functions/_middleware.js`
 - **Cron Worker**: Cloudflare Worker riêng (`worker/index.js`) — chạy weekly snapshot (cron `0 17 * * 0`)
 - **Database**: Cloudflare D1 (SQLite), binding `DB`, db `finance-db`
+- **Auth**: Self-hosted email + password. PBKDF2-SHA256 (600k iter) qua Web Crypto. Session cookie `sid` (HttpOnly, Secure, SameSite=Lax, 30 ngày sliding refresh) lưu trong bảng `sessions`.
 - **Build**: Vite, root `src/`, output `dist/`
 - **Deploy**: Cloudflare Pages (`wrangler pages deploy dist`) + Worker (`wrangler deploy --config worker/wrangler.toml`)
-- **PWA**: Service worker (`public/sw.js`), cache key `finance-shell-<git-sha>` (placeholder `__CACHE_VERSION__` được Vite build plugin thay bằng git short SHA, thêm `-dirty` nếu working tree bẩn)
+- **PWA**: Service worker (`public/sw.js`), cache key `finance-shell-<git-sha>`. Chỉ cache shell + static — **không cache `/api/*`** (per-user, auth-gated). Logout xoá toàn bộ caches.
 - **UI language**: Tiếng Việt
+
+## Tenancy Model
+
+Mỗi user có dữ liệu riêng. Các bảng per-user (`members`, `assets`, `asset_snapshots`, `user_settings`) đều có cột `user_id`. Các bảng global (`platforms`, `settings` cho market provider config) shared giữa users. `price_history` inherit tenancy qua `assets.user_id` (không có cột riêng).
 
 ## File Layout
 
 ```
 appscript/
 ├── src/                          # Frontend source
-│   ├── index.html                # HTML entry point
-│   ├── main.js                   # Router, SW registration, shared utils exports
-│   ├── api.js                    # Fetch wrapper (api.get/post/del)
-│   ├── style.css                 # All styles
+│   ├── index.html                # Có #sidebar-user cho user chip + logout button
+│   ├── main.js                   # bootstrap() → /api/auth/me → router(); user chip; logout helper
+│   ├── api.js                    # Fetch wrapper — credentials:'include', 401 → redirect login
+│   ├── style.css                 # All styles + .auth-card / .auth-tabs / body.auth-only gate
 │   ├── pages/
 │   │   ├── dashboard.js
 │   │   ├── assets.js
 │   │   ├── price-history.js
 │   │   ├── snapshots.js          # Weekly asset snapshots view
-│   │   └── settings.js
+│   │   ├── settings.js           # Có "Tài khoản" section (đổi mật khẩu + logout)
+│   │   └── login.js              # Tabbed login/signup form
 │   ├── components/
 │   │   ├── bank-select.js
 │   │   └── platform-select.js
@@ -41,52 +47,70 @@ appscript/
 │       └── groups.js
 ├── functions/                    # Cloudflare Pages Functions (API)
 │   ├── _utils.js
-│   ├── _snapshot.js              # Shared snapshot logic (used by API + cron worker)
+│   ├── _auth.js                  # hashPassword, verifyPassword, createSession, getSessionUser, cookie helpers
+│   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login, signup gated bởi env.ALLOW_SIGNUP)
+│   ├── _snapshot.js              # runSnapshot(env, { userId }) — yêu cầu userId
 │   └── api/
-│       ├── _providers.js         # Shared market-data provider logic
+│       ├── _providers.js         # fetchAllProviders(env, userId?) — userId optional (UI scoped, cron global)
+│       ├── auth/
+│       │   ├── signup.js         # POST — env.ALLOW_SIGNUP='true' mới enable
+│       │   ├── login.js          # POST — verify password (timing-safe), set sid cookie
+│       │   ├── logout.js         # POST — destroy session, clear cookie
+│       │   ├── me.js             # GET — current user (401 nếu chưa login)
+│       │   └── password.js       # POST — đổi mật khẩu, invalidate other sessions
+│       ├── user-settings.js      # GET/POST per-user K/V (integrations sống ở đây)
 │       ├── price-history.js
 │       ├── assets.js
 │       ├── assets/[id].js
 │       ├── members.js
-│       ├── platforms.js
-│       ├── settings.js
+│       ├── platforms.js          # Global
+│       ├── settings.js           # Global (chỉ market.* — reject integration.*)
 │       ├── providers.js
 │       ├── dashboard.js
-│       ├── export.js
-│       ├── import.js
-│       ├── sync.js
-│       ├── snapshots.js          # List/query snapshots
-│       ├── snapshots/run.js      # Manual snapshot trigger (POST)
-│       └── market-data/fetch.js
+│       ├── export.js             # Per-user dump (members, assets, price_history, asset_snapshots, user_settings) + global platforms
+│       ├── import.js             # Replace wipe per-user, inject user_id vào mọi row
+│       ├── sync.js               # TCBS/Topi sync — đọc instances từ user_settings
+│       ├── snapshots.js          # List/query snapshots (per-user)
+│       ├── snapshots/run.js      # Manual snapshot trigger (POST, per-user)
+│       └── market-data/fetch.js  # UI fetch (scoped tới caller); cron không dùng route này
 ├── worker/                       # Standalone Cloudflare Worker for cron
-│   ├── index.js                  # scheduled() → refresh providers + run snapshot
+│   ├── index.js                  # scheduled() → fetchAllProviders(env) một lần → loop users → runSnapshot per user
 │   └── wrangler.toml             # Weekly cron trigger
 ├── public/
 │   ├── manifest.webmanifest      # PWA manifest
-│   ├── sw.js                     # Service worker
+│   ├── sw.js                     # Service worker — KHÔNG cache /api/*
 │   ├── favicon.ico, favicon-32.png
 │   ├── apple-touch-icon.png
 │   └── icon-{192,512,maskable}.png
-├── migrations/
-│   └── 0001_asset_snapshots.sql
 ├── scripts/
-│   ├── db.sh                     # migrate / migrate:remote / seed / seed:remote
+│   ├── db.sh                     # migrate / migrate:remote / seed
 │   ├── setup.sh                  # Initial setup
 │   └── generate-icons.sh         # Build PWA icons from base_logo.png
-├── schema.sql                    # Full reset schema (members, platforms, assets, price_history, settings, asset_snapshots)
-├── demo.sql, init.sql            # Seed / initial data
-├── wrangler.toml                 # Pages config (DB binding, build output dir)
+├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, price_history, settings, asset_snapshots)
+├── demo.sql                      # Seed / initial data — demo có 1 user (demo@example.com / demo1234)
+├── wrangler.toml                 # Pages config (DB binding, build output dir, ALLOW_SIGNUP nếu mở signup)
 ├── vite.config.js                # Dev proxy /api/ → :8788; injects git info + SW cache version
 └── package.json                  # v0.1.0
 ```
 
 ## Routing
 
-Hash-based client-side routing trong `main.js`. Routes: `dashboard`, `assets`, `price-history`, `snapshots`, `settings`. Default: `dashboard`. Sidebar và bottom-nav active state đồng bộ với route.
+Hash-based client-side routing trong `main.js`. Khi load, `bootstrap()` gọi `GET /api/auth/me`:
+- **200** → set `currentUser`, gắn user chip vào sidebar, gọi `router()` để render route hiện tại.
+- **401** → set `body.auth-only` (ẩn sidebar/bottom-nav/nav-toggle), render `renderLogin(view)`.
+
+Routes: `dashboard`, `assets`, `price-history`, `snapshots`, `settings`. Default: `dashboard`. Sidebar và bottom-nav active state đồng bộ với route.
 
 ## Shared Utils (export từ main.js)
 
-`toast(msg, action?)`, `escapeHtml()`, `fmtVND()`, `fmtNum(n, digits=0)`, `fmtPct()`, `openModal()`, `closeModal()`, `rerender()`, `formatMoney()`, `parseMoney()`, `bindMoneyInputs()`, `parseMoneyPayload(payload, keys)`
+`toast(msg, action?)`, `escapeHtml()`, `fmtVND()`, `fmtNum(n, digits=0)`, `fmtPct()`, `openModal()`, `closeModal()`, `rerender()`, `formatMoney()`, `parseMoney()`, `bindMoneyInputs()`, `parseMoneyPayload(payload, keys)`, `getCurrentUser()`, `logout()`.
+
+## Auth Flow
+
+- **Signup** chỉ enable khi `env.ALLOW_SIGNUP === 'true'` (default closed). Bật tạm thời trong `wrangler.toml [vars]` để tạo user đầu, sau đó tắt.
+- **Login** verify password với constant-time compare; cả miss case cũng verify dummy hash để equalize timing. Set cookie `sid=...; HttpOnly; Secure; SameSite=Lax; Max-Age=30d`.
+- **Session sliding refresh** trong `getSessionUser`: bump `expires_at` khi session > 24h tuổi.
+- **Logout** xoá session row + clear cookie + xoá toàn bộ caches của browser (SW + Cache Storage) để dữ liệu user cũ không leak sang user mới.
 
 ## Build-Time Defines (vite.config.js)
 
@@ -100,21 +124,22 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 
 ## Settings Page Sections
 
-1. 👥 Thành viên (CRUD members)
-2. Nền tảng tiền gửi (CRUD platforms)
-3. Giá thị trường (price providers: vàng, USD)
-4. 🔗 Tích hợp dịch vụ (integrations)
-5. Sao lưu & phục hồi (JSON export/import)
-6. Ứng dụng (force reload phiên bản mới nhất)
+1. 👤 Tài khoản (current user info + đổi mật khẩu + logout)
+2. 👥 Thành viên (CRUD members — per-user)
+3. Nền tảng tiền gửi (CRUD platforms — global)
+4. Giá thị trường (market provider config — global, dùng `/api/settings`)
+5. 🔗 Tích hợp dịch vụ (TCBS/Topi instances — per-user, dùng `/api/user-settings`)
+6. Sao lưu & phục hồi (JSON export/import per-user)
+7. Ứng dụng (force reload phiên bản mới nhất)
 
 ## NPM Scripts
 
 - `dev` → concurrently chạy `vite` (frontend :5173) + `wrangler pages dev public --port=8788`
 - `build`, `deploy` → Vite build + Pages deploy
 - `worker:dev`, `worker:deploy` → cron worker (test bằng `--test-scheduled`)
-- `db:migrate[:remote]`, `db:seed[:remote]` → wrapper `scripts/db.sh`
+- `db:migrate[:remote]`, `db:seed` → wrapper `scripts/db.sh`
 - `icons`, `setup`
 
 ## Asset Snapshots
 
-Bảng `asset_snapshots` lưu tổng giá trị theo `(snapshot_date, group_id, subtype)` — UNIQUE bucket. Cron worker chạy weekly (Chủ nhật 17:00 UTC): `fetchAllProviders(env)` → `runSnapshot(env)`. Có thể trigger thủ công qua `POST /api/snapshots/run` hoặc `POST http://localhost:8787/` khi chạy `worker:dev`.
+Bảng `asset_snapshots` lưu tổng giá trị theo `(user_id, snapshot_date, group_id, subtype)` — UNIQUE bucket per user. Cron worker chạy weekly (Chủ nhật 17:00 UTC): `fetchAllProviders(env)` (gọi 1 lần, update tất cả users' assets trong bulk SQL) → loop users `runSnapshot(env, { userId })`. Có thể trigger thủ công per-user qua `POST /api/snapshots/run` hoặc trigger global qua `POST http://localhost:8787/` khi chạy `worker:dev`.

@@ -1,7 +1,7 @@
 import { json, error } from '../_utils.js';
 
 // GET /api/price-history?asset=&type=&page=1&limit=50
-export async function onRequestGet({ env, request }) {
+export async function onRequestGet({ env, request, data }) {
   try {
     const url = new URL(request.url);
     const asset = url.searchParams.get('asset');
@@ -10,12 +10,12 @@ export async function onRequestGet({ env, request }) {
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     const offset = (page - 1) * limit;
 
-    const where = [];
-    const params = [];
+    const where = ['a.user_id = ?'];
+    const params = [data.user.id];
     if (asset) { where.push('ph.asset_id = ?'); params.push(Number(asset)); }
     if (type)  { where.push('ph.type = ?');     params.push(type); }
 
-    const whereSQL = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const whereSQL = 'WHERE ' + where.join(' AND ');
 
     const [dataRes, countRes] = await Promise.all([
       env.DB.prepare(`
@@ -30,6 +30,7 @@ export async function onRequestGet({ env, request }) {
       env.DB.prepare(`
         SELECT COUNT(*) AS total
         FROM price_history ph
+        JOIN assets a ON a.id = ph.asset_id
         ${whereSQL}
       `).bind(...params).first(),
     ]);

@@ -25,14 +25,17 @@ async function apiError(resp, fallback) {
 }
 
 // POST /api/sync — upsert assets from a 3rd-party integration instance
-export async function onRequestPost({ env, request }) {
+export async function onRequestPost({ env, request, data }) {
   try {
     const { service, instance_id, asset_types = [], raw_data } = await readBody(request);
     if (!service || !instance_id) return error('service and instance_id required', 400);
     if (!asset_types.length) return error('asset_types required', 400);
 
-    const settingRow = await env.DB.prepare('SELECT value FROM settings WHERE key = ?')
-      .bind(`integration.${service}.instances`).first();
+    const userId = data.user.id;
+
+    const settingRow = await env.DB.prepare(
+      'SELECT value FROM user_settings WHERE user_id = ? AND key = ?',
+    ).bind(userId, `integration.${service}.instances`).first();
     if (!settingRow) return error('Instance not found', 404);
 
     let instances;
@@ -42,7 +45,7 @@ export async function onRequestPost({ env, request }) {
 
     let totalAdded = 0, totalUpdated = 0, totalRemoved = 0;
     for (const assetType of asset_types) {
-      const r = await syncType(env, service, instance, assetType, raw_data);
+      const r = await syncType(env, userId, service, instance, assetType, raw_data);
       totalAdded += r.added;
       totalUpdated += r.updated;
       totalRemoved += r.removed;
@@ -55,19 +58,20 @@ export async function onRequestPost({ env, request }) {
 }
 
 // DELETE /api/sync — soft-delete all assets owned by an instance
-export async function onRequestDelete({ env, request }) {
+export async function onRequestDelete({ env, request, data }) {
   try {
     const url = new URL(request.url);
     const service = url.searchParams.get('service');
     const instance_id = url.searchParams.get('instance_id');
     if (!service || !instance_id) return error('service and instance_id required', 400);
 
+    const userId = data.user.id;
     const prefix = srcPrefix(service, instance_id);
     const now = nowISO();
 
     const affected = await env.DB.prepare(
-      `SELECT id, current_price FROM assets WHERE status = 'active' AND notes LIKE ?`
-    ).bind(`${prefix}%`).all();
+      `SELECT id, current_price FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ?`,
+    ).bind(userId, `${prefix}%`).all();
 
     for (const a of (affected.results ?? [])) {
       await env.DB.prepare(
@@ -76,8 +80,8 @@ export async function onRequestDelete({ env, request }) {
     }
 
     await env.DB.prepare(
-      `UPDATE assets SET status = 'deleted', updated_at = ? WHERE status = 'active' AND notes LIKE ?`
-    ).bind(now, `${prefix}%`).run();
+      `UPDATE assets SET status = 'deleted', updated_at = ? WHERE status = 'active' AND user_id = ? AND notes LIKE ?`,
+    ).bind(now, userId, `${prefix}%`).run();
 
     return json({ removed: affected.results?.length ?? 0 });
   } catch (err) {
@@ -87,9 +91,9 @@ export async function onRequestDelete({ env, request }) {
 
 // ─── Dispatch ────────────────────────────────────────────────────────────────
 
-async function syncType(env, service, instance, assetType, rawData) {
-  if (service === 'topi') return syncTopi(env, instance, assetType, rawData);
-  if (service === 'tcbs') return syncTcbs(env, instance, assetType);
+async function syncType(env, userId, service, instance, assetType, rawData) {
+  if (service === 'topi') return syncTopi(env, userId, instance, assetType, rawData);
+  if (service === 'tcbs') return syncTcbs(env, userId, instance, assetType);
   throw new Error(`Unknown service: ${service}`);
 }
 
@@ -97,7 +101,7 @@ async function syncType(env, service, instance, assetType, rawData) {
 
 const TOPI_PID = { 'tien-gui': 6, 'vang': 7 };
 
-async function syncTopi(env, instance, assetType, rawData) {
+async function syncTopi(env, userId, instance, assetType, rawData) {
   if (!rawData) throw new Error('Topi yêu cầu upload file JSON — không hỗ trợ sync tự động');
   if (!TOPI_PID[assetType]) throw new Error(`Topi does not support asset type: ${assetType}`);
 
@@ -131,7 +135,7 @@ async function syncTopi(env, instance, assetType, rawData) {
   }
 
   if (assetType === 'tien-gui') {
-    return upsertAssets(env, 'topi', instance, incoming, {
+    return upsertAssets(env, userId, 'topi', instance, incoming, {
       groupId: 'tien-gui',
       toKey: ({ pp }) => ({ keyType: 'order', keyValue: pp.OrderNo }),
       toAsset: ({ product, pp }) => {
@@ -158,7 +162,7 @@ async function syncTopi(env, instance, assetType, rawData) {
   }
 
   // assetType === 'vang'
-  return upsertAssets(env, 'topi', instance, incoming, {
+  return upsertAssets(env, userId, 'topi', instance, incoming, {
     groupId: 'tich-tru',
     subtype: 'vang',
     toKey: ({ pp }) => ({ keyType: 'order', keyValue: pp.OrderNo }),
@@ -190,7 +194,7 @@ async function syncTopi(env, instance, assetType, rawData) {
 
 // ─── TCBS ────────────────────────────────────────────────────────────────────
 
-async function syncTcbs(env, instance, assetType) {
+async function syncTcbs(env, userId, instance, assetType) {
   const { token, custody_code, tcbs_id } = instance;
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -204,7 +208,7 @@ async function syncTcbs(env, instance, assetType) {
     console.log('[TCBS co-phieu]', JSON.stringify(data));
     const positions = Array.isArray(data) ? data : (data.stock ?? data.data ?? data.result ?? []);
 
-    return upsertAssets(env, 'tcbs', instance, positions, {
+    return upsertAssets(env, userId, 'tcbs', instance, positions, {
       groupId: 'dau-tu',
       subtype: 'co-phieu',
       toKey: (p) => ({ keyType: 'sym', keyValue: p.symbol }),
@@ -231,7 +235,7 @@ async function syncTcbs(env, instance, assetType) {
     console.log('[TCBS trai-phieu]', JSON.stringify(data));
     const bonds = data.assets ?? data.data ?? (Array.isArray(data) ? data : []);
 
-    return upsertAssets(env, 'tcbs', instance, bonds, {
+    return upsertAssets(env, userId, 'tcbs', instance, bonds, {
       groupId: 'dau-tu',
       subtype: 'trai-phieu',
       toKey: (b) => ({ keyType: 'bond', keyValue: b.bondCode }),
@@ -256,7 +260,7 @@ async function syncTcbs(env, instance, assetType) {
     console.log('[TCBS ccq]', JSON.stringify(data));
     const funds = data.balanceList ?? data.data ?? (Array.isArray(data) ? data : []);
 
-    return upsertAssets(env, 'tcbs', instance, funds, {
+    return upsertAssets(env, userId, 'tcbs', instance, funds, {
       groupId: 'dau-tu',
       subtype: 'ccq',
       toKey: (f) => ({ keyType: 'fund', keyValue: f.productId }),
@@ -283,7 +287,7 @@ async function syncTcbs(env, instance, assetType) {
     console.log('[TCBS tien-mat]', JSON.stringify(data));
     const balances = (data.data ?? []).filter((b) => (b.available ?? 0) > 0);
 
-    return upsertAssets(env, 'tcbs', instance, balances, {
+    return upsertAssets(env, userId, 'tcbs', instance, balances, {
       groupId: 'bank',
       subtype: 'tk-tu-do',
       toKey: (b) => ({ keyType: 'partner', keyValue: b.partner }),
@@ -307,15 +311,15 @@ async function syncTcbs(env, instance, assetType) {
 // ─── Generic upsert ──────────────────────────────────────────────────────────
 // opts: { groupId, subtype?, toKey(item), toAsset(item) }
 
-async function upsertAssets(env, service, instance, incomingItems, opts) {
+async function upsertAssets(env, userId, service, instance, incomingItems, opts) {
   const { groupId, subtype = null, toKey, toAsset } = opts;
   const prefix = srcPrefix(service, instance.id);
   const memberId = instance.member_id ? Number(instance.member_id) : null;
   const now = nowISO();
 
-  // Load existing active assets owned by this instance for the target group/subtype
-  let existingQuery = `SELECT id, notes, current_price FROM assets WHERE status = 'active' AND notes LIKE ? AND group_id = ?`;
-  const existingParams = [`${prefix}%`, groupId];
+  // Load existing active assets owned by this instance (for this user) in the target group/subtype.
+  let existingQuery = `SELECT id, notes, current_price FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ? AND group_id = ?`;
+  const existingParams = [userId, `${prefix}%`, groupId];
   if (subtype) { existingQuery += ` AND subtype = ?`; existingParams.push(subtype); }
   const existingRows = await env.DB.prepare(existingQuery).bind(...existingParams).all();
 
@@ -345,7 +349,7 @@ async function upsertAssets(env, service, instance, incomingItems, opts) {
           interest_rate = ?, interest_tax_rate = ?,
           term = ?, start_date = ?, maturity_date = ?,
           subtype = ?, member_id = ?, notes = ?, ticker = ?, updated_at = ?
-        WHERE id = ?
+        WHERE id = ? AND user_id = ?
       `).bind(
         a.name,
         a.qty ?? null,
@@ -362,6 +366,7 @@ async function upsertAssets(env, service, instance, incomingItems, opts) {
         a.ticker ?? null,
         now,
         id,
+        userId,
       ).run();
       await env.DB.prepare(
         `INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, 'edit')`
@@ -370,13 +375,14 @@ async function upsertAssets(env, service, instance, incomingItems, opts) {
     } else {
       const result = await env.DB.prepare(`
         INSERT INTO assets (
-          name, group_id, subtype, member_id, qty, unit,
+          user_id, name, group_id, subtype, member_id, qty, unit,
           cost_price, current_price,
           platform, term, maturity_date,
           interest_rate, interest_tax_rate, start_date, notes, ticker,
           status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
       `).bind(
+        userId,
         a.name,
         a.group_id,
         a.subtype ?? null,
@@ -407,8 +413,8 @@ async function upsertAssets(env, service, instance, incomingItems, opts) {
   for (const [key, { id, currentPrice }] of existingMap) {
     if (!seenKeys.has(key)) {
       await env.DB.prepare(
-        `UPDATE assets SET status = 'deleted', updated_at = ? WHERE id = ?`
-      ).bind(now, id).run();
+        `UPDATE assets SET status = 'deleted', updated_at = ? WHERE id = ? AND user_id = ?`
+      ).bind(now, id, userId).run();
       await env.DB.prepare(
         `INSERT INTO price_history (asset_id, price, recorded_at, source, type) VALUES (?, ?, ?, ?, 'delete')`
       ).bind(id, currentPrice ?? 0, now, `sync:${service}`).run();

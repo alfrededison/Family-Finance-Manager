@@ -1,4 +1,4 @@
--- Finance Manager — D1 Schema (Vietnamese finance tracking)
+-- Finance Manager — D1 Schema (Vietnamese finance tracking, multi-user)
 
 PRAGMA foreign_keys = ON;
 
@@ -7,14 +7,46 @@ DROP TABLE IF EXISTS price_history;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
+DROP TABLE IF EXISTS user_settings;
 DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
+
+CREATE TABLE users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  name          TEXT    NOT NULL,
+  password_hash TEXT    NOT NULL,                       -- "v1:<iter>:<saltB64u>:<hashB64u>"
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE sessions (
+  id          TEXT    PRIMARY KEY,                      -- 32-byte random, base64url
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  expires_at  TEXT    NOT NULL,
+  user_agent  TEXT,
+  ip          TEXT
+);
+CREATE INDEX idx_sessions_user    ON sessions(user_id);
+CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+
+CREATE TABLE user_settings (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key     TEXT    NOT NULL,
+  value   TEXT    NOT NULL,
+  PRIMARY KEY (user_id, key)
+);
 
 CREATE TABLE members (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name       TEXT    NOT NULL,
   color      TEXT    NOT NULL DEFAULT '#3b82f6',
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+CREATE INDEX idx_members_user ON members(user_id);
 
 CREATE TABLE platforms (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,6 +57,7 @@ CREATE TABLE platforms (
 -- Stored values here are slug IDs (e.g. group_id='dau-tu', subtype='co-phieu').
 CREATE TABLE assets (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name           TEXT    NOT NULL,
   group_id       TEXT    NOT NULL,
   subtype        TEXT,
@@ -50,6 +83,7 @@ CREATE TABLE assets (
   updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX idx_assets_user    ON assets(user_id);
 CREATE INDEX idx_assets_group   ON assets(group_id);
 CREATE INDEX idx_assets_member  ON assets(member_id);
 CREATE INDEX idx_assets_status  ON assets(status);
@@ -72,11 +106,12 @@ CREATE TABLE settings (
   value TEXT NOT NULL
 );
 
--- Weekly snapshots of aggregated asset value by (group_id, subtype).
+-- Weekly snapshots of aggregated asset value by (user_id, group_id, subtype).
 -- Populated by the cron worker (worker/index.js) and manual triggers
--- (POST /api/snapshots/run). One row per (snapshot_date, group_id, subtype).
+-- (POST /api/snapshots/run). One row per (user_id, snapshot_date, group_id, subtype).
 CREATE TABLE asset_snapshots (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   recorded_at   TEXT    NOT NULL,
   snapshot_date TEXT    NOT NULL,
   group_id      TEXT    NOT NULL,
@@ -86,6 +121,7 @@ CREATE TABLE asset_snapshots (
   asset_count   INTEGER NOT NULL
 );
 
+CREATE INDEX idx_snapshots_user ON asset_snapshots(user_id);
 CREATE INDEX idx_snapshots_date ON asset_snapshots(snapshot_date);
 CREATE UNIQUE INDEX uq_snapshots_bucket
-  ON asset_snapshots(snapshot_date, group_id, COALESCE(subtype, ''));
+  ON asset_snapshots(user_id, snapshot_date, group_id, COALESCE(subtype, ''));

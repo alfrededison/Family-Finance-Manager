@@ -1,7 +1,7 @@
 import { json, error, readBody, nowISO, computeAssetMetrics } from '../_utils.js';
 
 // GET /api/assets?group=&member=&subtype=&q=
-export async function onRequestGet({ env, request }) {
+export async function onRequestGet({ env, request, data }) {
   try {
     const url = new URL(request.url);
     const group = url.searchParams.get('group');
@@ -9,8 +9,8 @@ export async function onRequestGet({ env, request }) {
     const subtype = url.searchParams.get('subtype');
     const q = url.searchParams.get('q');
 
-    const where = ["a.status = 'active'"];
-    const params = [];
+    const where = ["a.status = 'active'", 'a.user_id = ?'];
+    const params = [data.user.id];
     if (group)   { where.push('a.group_id = ?'); params.push(String(group)); }
     if (member)  { where.push('a.member_id = ?'); params.push(Number(member)); }
     if (subtype) { where.push('a.subtype = ?'); params.push(String(subtype)); }
@@ -19,13 +19,11 @@ export async function onRequestGet({ env, request }) {
     const sql = `
       SELECT a.*, m.name AS member_name, m.color AS member_color
       FROM assets a
-      LEFT JOIN members m ON m.id = a.member_id
+      LEFT JOIN members m ON m.id = a.member_id AND m.user_id = a.user_id
       WHERE ${where.join(' AND ')}
       ORDER BY a.id DESC
     `;
-    const stmt = env.DB.prepare(sql);
-    const bound = params.length ? stmt.bind(...params) : stmt;
-    const res = await bound.all();
+    const res = await env.DB.prepare(sql).bind(...params).all();
 
     const rows = (res.results || []).map((a) => ({ ...a, ...computeAssetMetrics(a) }));
 
@@ -36,7 +34,7 @@ export async function onRequestGet({ env, request }) {
 }
 
 // POST /api/assets
-export async function onRequestPost({ env, request }) {
+export async function onRequestPost({ env, request, data }) {
   try {
     const b = await readBody(request);
     if (!b.name || !b.group_id) return error('name and group_id required', 400);
@@ -44,13 +42,14 @@ export async function onRequestPost({ env, request }) {
     const now = nowISO();
     const result = await env.DB.prepare(`
       INSERT INTO assets (
-        name, group_id, subtype, member_id, qty, unit,
+        user_id, name, group_id, subtype, member_id, qty, unit,
         cost_price, current_price,
         platform, term, maturity_date, bank,
         interest_rate, interest_tax_rate, start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `).bind(
+      data.user.id,
       b.name,
       String(b.group_id),
       b.subtype || null,
@@ -77,7 +76,8 @@ export async function onRequestPost({ env, request }) {
       'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(id, Number(b.current_price || b.cost_price || 0), now, 'manual', 'create', b.notes || null).run();
 
-    const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ?').bind(id).first();
+    const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
+      .bind(id, data.user.id).first();
     return json(row, 201);
   } catch (err) {
     return error(err.message, 500);

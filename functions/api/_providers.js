@@ -100,12 +100,25 @@ export const SETTINGS_DEFAULTS = {
 };
 
 // ── Core fetch + update logic ───────────────────────────────────────────────
+//
+// `userId` is optional:
+//   - When provided (UI fetch path): asset SELECT/UPDATE are scoped to that user.
+//   - When omitted (cron path): the same asset writes apply globally to ALL users
+//     in a single SQL statement — no per-user loop, no duplicate HTTP traffic.
+
+function scopeClause(userId) {
+  return userId == null ? '' : ' AND user_id = ?';
+}
+function scopeParams(base, userId) {
+  return userId == null ? base : [...base, userId];
+}
 
 // Per-ticker providers: each asset has its own ticker → fetch a map of { TICKER: price }.
-async function fetchOnePerTicker(env, provider, subtype, now) {
+async function fetchOnePerTicker(env, provider, subtype, now, userId) {
   const assetRows = await env.DB.prepare(
-    "SELECT id, ticker, current_price FROM assets WHERE subtype = ? AND status = 'active' AND ticker IS NOT NULL AND ticker != ''",
-  ).bind(subtype).all();
+    "SELECT id, ticker, current_price FROM assets WHERE subtype = ? AND status = 'active' AND ticker IS NOT NULL AND ticker != ''"
+    + scopeClause(userId),
+  ).bind(...scopeParams([subtype], userId)).all();
 
   const assets = assetRows.results || [];
   if (assets.length === 0) {
@@ -163,24 +176,24 @@ async function fetchOnePerTicker(env, provider, subtype, now) {
   return { provider: provider.id, subtype, prices, assetsUpdated, isDefault, fetched_at: now };
 }
 
-export async function fetchAllProviders(env) {
+export async function fetchAllProviders(env, userId) {
   const tasks = [];
   for (const p of Object.values(PROVIDERS)) {
     for (const st of p.subtypes) {
-      tasks.push(fetchOne(env, p.id, st));
+      tasks.push(fetchOne(env, p.id, st, userId));
     }
   }
   return Promise.all(tasks);
 }
 
-export async function fetchOne(env, providerId, subtype) {
+export async function fetchOne(env, providerId, subtype, userId) {
   const provider = PROVIDERS[providerId];
   if (!provider) return { provider: providerId, subtype, error: 'unknown provider' };
 
   const now = nowISO();
 
   if (provider.perTicker) {
-    return fetchOnePerTicker(env, provider, subtype, now);
+    return fetchOnePerTicker(env, provider, subtype, now, userId);
   }
 
   let prices;
@@ -190,7 +203,7 @@ export async function fetchOne(env, providerId, subtype) {
     return { provider: providerId, subtype, error: err.message };
   }
 
-  // Cache result in settings
+  // Cache result globally — provider data isn't user-specific.
   const cacheKey = `market.cache.${subtype}.${providerId}`;
   await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
     .bind(cacheKey, JSON.stringify({ ...prices, fetched_at: now })).run();
@@ -206,14 +219,16 @@ export async function fetchOne(env, providerId, subtype) {
   let assetsUpdated = 0;
 
   if (isDefault) {
-    // Read old prices before update so they can be stored in history
+    // Read old prices before update so they can be stored in history.
     const assetRows = await env.DB.prepare(
-      "SELECT id, current_price FROM assets WHERE subtype = ? AND status = 'active'",
-    ).bind(subtype).all();
+      "SELECT id, current_price FROM assets WHERE subtype = ? AND status = 'active'"
+      + scopeClause(userId),
+    ).bind(...scopeParams([subtype], userId)).all();
 
     const updateRes = await env.DB.prepare(
-      "UPDATE assets SET current_price = ?, updated_at = ? WHERE subtype = ? AND status = 'active'",
-    ).bind(prices.price, now, subtype).run();
+      "UPDATE assets SET current_price = ?, updated_at = ? WHERE subtype = ? AND status = 'active'"
+      + scopeClause(userId),
+    ).bind(...scopeParams([prices.price, now, subtype], userId)).run();
     assetsUpdated = updateRes.meta?.changes ?? 0;
 
     if (assetsUpdated > 0) {

@@ -25,10 +25,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)));
-    return;
-  }
+  // Never cache /api/* responses — they're per-user and auth-gated.
+  // Pass the request straight to the network; let the browser handle failures.
+  if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {

@@ -109,6 +109,89 @@ body {
 .sidebar a:hover { background: rgba(255,255,255,0.06); color: #fff; }
 .sidebar a.active { background: var(--primary); color: #fff; }
 
+/* Sidebar user chip — pushed to bottom of the sidebar column */
+.sidebar { display: flex; flex-direction: column; }
+.sidebar nav { flex: 1; }
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.sidebar-user .user-meta { flex: 1; min-width: 0; }
+.sidebar-user .user-name {
+  font-weight: 600; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sidebar-user .user-email {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #94a3b8;
+}
+.sidebar-user .icon-btn {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  border-color: rgba(255,255,255,0.12);
+}
+.sidebar-user .icon-btn:hover { background: rgba(255,255,255,0.18); }
+
+/* Auth-only screen: hide app chrome so only #view + login form show */
+body.auth-only #sidebar,
+body.auth-only #bottom-nav,
+body.auth-only #nav-toggle,
+body.auth-only #nav-backdrop { display: none !important; }
+body.auth-only #app { display: block; }
+
+/* Auth (login / signup) card */
+.auth-card {
+  max-width: 380px;
+  margin: 10vh auto 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.auth-card h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  text-align: center;
+}
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: 8px;
+}
+.auth-tabs button {
+  flex: 1;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.auth-tabs button:hover { opacity: 1; color: var(--text); }
+.auth-tabs button.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.auth-error {
+  color: var(--danger);
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-radius: 6px;
+}
+
 /* Main */
 main {
   padding: 24px 32px;

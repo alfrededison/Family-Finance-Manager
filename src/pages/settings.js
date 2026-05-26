@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { escapeHtml, toast, rerender, fmtVND, openModal, closeModal } from '../main.js';
+import { escapeHtml, toast, rerender, fmtVND, openModal, closeModal, getCurrentUser, logout } from '../main.js';
 
 const INTEGRATION_DEFS = {
   tcbs: {
@@ -36,6 +36,23 @@ const MARKET_SUBTYPE_LABELS = {
 export async function renderSettings(view) {
   view.innerHTML = `
     <div class="page-header"><h1>⚙️ Cài đặt</h1></div>
+
+    <div class="section">
+      <h2>👤 Tài khoản</h2>
+      <div id="account-info" style="margin-bottom:12px;"></div>
+      <form id="password-form" class="form-grid">
+        <label class="full">Mật khẩu hiện tại
+          <input name="current_password" type="password" required autocomplete="current-password" />
+        </label>
+        <label class="full">Mật khẩu mới (tối thiểu 8 ký tự)
+          <input name="new_password" type="password" required minlength="8" autocomplete="new-password" />
+        </label>
+        <div class="modal-actions full">
+          <button type="button" id="btn-logout-settings" class="secondary">Đăng xuất</button>
+          <button type="submit">Đổi mật khẩu</button>
+        </div>
+      </form>
+    </div>
 
     <div class="section">
       <h2>👥 Thành viên</h2>
@@ -105,6 +122,10 @@ export async function renderSettings(view) {
     </div>
   `;
 
+  renderAccount();
+  document.getElementById('btn-logout-settings').onclick = logout;
+  document.getElementById('password-form').onsubmit = onChangePassword;
+
   await reloadMembers();
   await reloadPlatforms();
   await reloadMarketSettings();
@@ -136,6 +157,37 @@ export async function renderSettings(view) {
   document.getElementById('btn-force-reload').onclick = onForceReload;
   document.getElementById('export-btn').onclick = onExport;
   document.getElementById('import-form').onsubmit = onImport;
+}
+
+function renderAccount() {
+  const user = getCurrentUser();
+  const el = document.getElementById('account-info');
+  if (!el || !user) return;
+  el.innerHTML = `
+    <div><strong>${escapeHtml(user.name)}</strong></div>
+    <div class="muted-sm">${escapeHtml(user.email)}</div>
+  `;
+}
+
+async function onChangePassword(e) {
+  e.preventDefault();
+  const form = e.target;
+  const submit = form.querySelector('[type="submit"]');
+  submit.disabled = true;
+  submit.classList.add('btn-loading');
+  try {
+    await api.post('/auth/password', {
+      current_password: form.current_password.value,
+      new_password: form.new_password.value,
+    });
+    form.reset();
+    toast('Đã đổi mật khẩu');
+  } catch (err) {
+    toast('Lỗi: ' + err.message);
+  } finally {
+    submit.disabled = false;
+    submit.classList.remove('btn-loading');
+  }
 }
 
 async function reloadMarketSettings() {
@@ -448,7 +500,7 @@ async function reloadIntegrations() {
   if (!container) return;
 
   const [settings, members] = await Promise.all([
-    api.get('/settings'),
+    api.get('/user-settings'),
     api.get('/members'),
   ]);
 
@@ -623,12 +675,12 @@ function bindInstanceCardActions(container) {
 }
 
 async function updateInstanceField(serviceId, instanceId, fields) {
-  const settings = await api.get('/settings');
+  const settings = await api.get('/user-settings');
   const instances = parseInstances(settings[`integration.${serviceId}.instances`]);
   const idx = instances.findIndex((i) => i.id === instanceId);
   if (idx === -1) throw new Error('Instance not found');
   instances[idx] = { ...instances[idx], ...fields };
-  await api.post('/settings', { key: `integration.${serviceId}.instances`, value: instances });
+  await api.post('/user-settings', { key: `integration.${serviceId}.instances`, value: instances });
 }
 
 function openDeleteInstanceDialog(serviceId, instanceId) {
@@ -675,9 +727,9 @@ function openDeleteInstanceDialog(serviceId, instanceId) {
 }
 
 async function removeInstance(serviceId, instanceId) {
-  const settings = await api.get('/settings');
+  const settings = await api.get('/user-settings');
   const instances = parseInstances(settings[`integration.${serviceId}.instances`]);
-  await api.post('/settings', {
+  await api.post('/user-settings', {
     key: `integration.${serviceId}.instances`,
     value: instances.filter((i) => i.id !== instanceId),
   });
@@ -850,7 +902,7 @@ function openInstanceModal(serviceId, existing, members) {
       for (const f of def.fields) newInst[f.name] = data[f.name]?.trim() || '';
 
       try {
-        const currentSettings = await api.get('/settings');
+        const currentSettings = await api.get('/user-settings');
         const instances = parseInstances(currentSettings[`integration.${serviceId}.instances`]);
         if (editing) {
           const idx = instances.findIndex((i) => i.id === inst.id);
@@ -858,7 +910,7 @@ function openInstanceModal(serviceId, existing, members) {
         } else {
           instances.push(newInst);
         }
-        await api.post('/settings', { key: `integration.${serviceId}.instances`, value: instances });
+        await api.post('/user-settings', { key: `integration.${serviceId}.instances`, value: instances });
         toast(editing ? 'Đã cập nhật' : 'Đã thêm kết nối');
         closeModal();
         await reloadIntegrations();

@@ -1,41 +1,23 @@
 import { json, error, readBody, nowISO } from '../_utils.js';
 
-// Column definitions per table (used to bind insert params consistently).
-const COLUMNS = {
-  members:   ['id', 'name', 'color', 'created_at'],
-  platforms: ['id', 'name'],
-  assets: [
-    'id', 'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
-    'cost_price', 'current_price', 'platform', 'term', 'maturity_date', 'bank',
-    'interest_rate', 'interest_tax_rate', 'start_date', 'notes', 'ticker',
-    'status', 'created_at', 'updated_at',
-  ],
-  settings: ['key', 'value'],
-  price_history: ['id', 'asset_id', 'price', 'recorded_at', 'source'],
-};
-
-// Delete order (child → parent) to satisfy FK constraints.
-const DELETE_ORDER = [
-  'price_history',
-  'assets',
-  'platforms',
-  'members',
-  'settings',
-];
-
 // POST /api/import  { mode: 'replace' | 'merge', data: {...} }
-export async function onRequestPost({ env, request }) {
+//
+// Scope: this operates on the CURRENT user only. Replace wipes only this user's
+// rows; merge inserts under the current user. `platforms` is global — merged
+// in by name to avoid duplicates; never wiped from the replace branch.
+export async function onRequestPost({ env, request, data }) {
   try {
     const body = await readBody(request);
     const mode = body.mode === 'merge' ? 'merge' : 'replace';
-    const data = body.data;
-    if (!data || typeof data !== 'object') {
+    const payload = body.data;
+    if (!payload || typeof payload !== 'object') {
       return error('Thiếu trường data', 400);
     }
 
+    const userId = data.user.id;
     const stats = mode === 'replace'
-      ? await runReplace(env, data)
-      : await runMerge(env, data);
+      ? await runReplace(env, userId, payload)
+      : await runMerge(env, userId, payload);
 
     return json({ ok: true, mode, stats });
   } catch (err) {
@@ -44,23 +26,23 @@ export async function onRequestPost({ env, request }) {
 }
 
 // ── Replace mode ───────────────────────────────────────────────────────────
-// Wipe all tables, then re-insert with original IDs preserved.
-async function runReplace(env, data) {
-  for (const t of DELETE_ORDER) {
-    await env.DB.prepare(`DELETE FROM ${t}`).run();
-  }
+// Wipe the user's own rows, then re-insert from payload (new auto-IDs).
+async function runReplace(env, userId, payload) {
+  // price_history → first (FK to assets), but filter via assets join.
+  await env.DB.prepare(`
+    DELETE FROM price_history WHERE asset_id IN (SELECT id FROM assets WHERE user_id = ?)
+  `).bind(userId).run();
+  await env.DB.prepare('DELETE FROM asset_snapshots WHERE user_id = ?').bind(userId).run();
+  await env.DB.prepare('DELETE FROM assets WHERE user_id = ?').bind(userId).run();
+  await env.DB.prepare('DELETE FROM members WHERE user_id = ?').bind(userId).run();
+  await env.DB.prepare('DELETE FROM user_settings WHERE user_id = ?').bind(userId).run();
 
-  const stats = {};
-  for (const t of Object.keys(COLUMNS)) {
-    const rows = Array.isArray(data[t]) ? data[t] : [];
-    stats[t] = await insertRows(env, t, rows, COLUMNS[t]);
-  }
-  return stats;
+  return runMerge(env, userId, payload);
 }
 
 // ── Merge mode ─────────────────────────────────────────────────────────────
 // Insert with new auto-IDs, remap foreign keys via id-maps.
-async function runMerge(env, data) {
+async function runMerge(env, userId, payload) {
   const stats = {};
   const memberMap = {};
   const platformMap = {};
@@ -68,39 +50,39 @@ async function runMerge(env, data) {
 
   // members
   stats.members = 0;
-  for (const r of (data.members || [])) {
-    const newId = await insertGetId(env,
-      'INSERT INTO members (name, color, created_at) VALUES (?, ?, ?)',
-      [r.name, r.color || '#3b82f6', r.created_at || nowISO()]);
-    memberMap[r.id] = newId;
+  for (const r of (payload.members || [])) {
+    const res = await env.DB.prepare(
+      'INSERT INTO members (user_id, name, color, created_at) VALUES (?, ?, ?, ?)',
+    ).bind(userId, r.name, r.color || '#3b82f6', r.created_at || nowISO()).run();
+    memberMap[r.id] = res.meta.last_row_id;
     stats.members++;
   }
 
-  // platforms — unique on name
+  // platforms — global, unique by name; map old → new id.
   stats.platforms = 0;
-  for (const r of (data.platforms || [])) {
+  for (const r of (payload.platforms || [])) {
     const existing = await env.DB.prepare('SELECT id FROM platforms WHERE name = ?').bind(r.name).first();
     if (existing) {
       platformMap[r.id] = existing.id;
     } else {
-      const newId = await insertGetId(env,
-        'INSERT INTO platforms (name) VALUES (?)', [r.name]);
-      platformMap[r.id] = newId;
+      const res = await env.DB.prepare('INSERT INTO platforms (name) VALUES (?)').bind(r.name).run();
+      platformMap[r.id] = res.meta.last_row_id;
       stats.platforms++;
     }
   }
 
   // assets
   stats.assets = 0;
-  for (const r of (data.assets || [])) {
-    const newId = await insertGetId(env, `
+  for (const r of (payload.assets || [])) {
+    const res = await env.DB.prepare(`
       INSERT INTO assets (
-        name, group_id, subtype, member_id, qty, unit,
+        user_id, name, group_id, subtype, member_id, qty, unit,
         cost_price, current_price, platform, term, maturity_date, bank,
         interest_rate, interest_tax_rate, start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      userId,
       r.name, r.group_id, r.subtype || null,
       r.member_id != null ? (memberMap[r.member_id] ?? null) : null,
       Number(r.qty || 0), r.unit || null,
@@ -109,49 +91,58 @@ async function runMerge(env, data) {
       r.interest_rate ?? null, r.interest_tax_rate ?? null,
       r.start_date || null, r.notes || null, r.ticker || null,
       r.status || 'active', r.created_at || nowISO(), r.updated_at || nowISO(),
-    ]);
-    assetMap[r.id] = newId;
+    ).run();
+    assetMap[r.id] = res.meta.last_row_id;
     stats.assets++;
   }
 
   // price_history
   stats.price_history = 0;
-  for (const r of (data.price_history || [])) {
+  for (const r of (payload.price_history || [])) {
     const assetId = assetMap[r.asset_id];
     if (assetId == null) continue;
     await env.DB.prepare(
-      'INSERT INTO price_history (asset_id, price, recorded_at, source) VALUES (?, ?, ?, ?)'
-    ).bind(assetId, Number(r.price || 0), r.recorded_at || nowISO(), r.source || 'manual').run();
+      'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      assetId,
+      Number(r.price || 0),
+      r.old_price ?? null,
+      r.recorded_at || nowISO(),
+      r.source || 'manual',
+      r.type || 'edit',
+      r.note ?? null,
+    ).run();
     stats.price_history++;
   }
 
-  // settings — upsert so existing settings are preserved/overwritten
-  stats.settings = 0;
-  for (const r of (data.settings || [])) {
-    await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
-      .bind(r.key, r.value).run();
-    stats.settings++;
+  // asset_snapshots
+  stats.asset_snapshots = 0;
+  for (const r of (payload.asset_snapshots || [])) {
+    await env.DB.prepare(`
+      INSERT OR REPLACE INTO asset_snapshots
+        (user_id, recorded_at, snapshot_date, group_id, subtype, value, cost, asset_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      userId,
+      r.recorded_at || nowISO(),
+      r.snapshot_date,
+      r.group_id,
+      r.subtype || null,
+      Number(r.value || 0),
+      Number(r.cost || 0),
+      Number(r.asset_count || 0),
+    ).run();
+    stats.asset_snapshots++;
+  }
+
+  // user_settings — per-user upsert by (user_id, key)
+  stats.user_settings = 0;
+  for (const r of (payload.user_settings || [])) {
+    await env.DB.prepare(
+      'INSERT OR REPLACE INTO user_settings (user_id, key, value) VALUES (?, ?, ?)',
+    ).bind(userId, r.key, r.value).run();
+    stats.user_settings++;
   }
 
   return stats;
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-async function insertRows(env, table, rows, columns) {
-  if (!rows.length) return 0;
-  const placeholders = columns.map(() => '?').join(', ');
-  const sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
-  let count = 0;
-  for (const r of rows) {
-    const values = columns.map((c) => (r[c] === undefined ? null : r[c]));
-    await env.DB.prepare(sql).bind(...values).run();
-    count++;
-  }
-  return count;
-}
-
-async function insertGetId(env, sql, params) {
-  const res = await env.DB.prepare(sql).bind(...params).run();
-  return res.meta.last_row_id;
 }

@@ -15,11 +15,15 @@ export async function onRequestGet({ env }) {
   }
 }
 
-// POST /api/settings { key, value } — upsert a single setting
+// POST /api/settings { key, value } — upsert a single GLOBAL setting.
+// Per-user settings (integration.* etc.) live in /api/user-settings.
 export async function onRequestPost({ env, request }) {
   try {
     const { key, value } = await readBody(request);
     if (!key) return error('key required', 400);
+    if (String(key).startsWith('integration.')) {
+      return error('integration.* settings belong in /api/user-settings', 400);
+    }
     await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
       .bind(String(key), JSON.stringify(value)).run();
     return json({ ok: true, key });
