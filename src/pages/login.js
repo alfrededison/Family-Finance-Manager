@@ -5,7 +5,7 @@ export function renderLogin(view) {
     const isSignup = mode === 'signup';
     view.innerHTML = `
       <div class="auth-card">
-        <h1>💰 Tài chính</h1>
+        <h1>💰 Tài chính Gia đình</h1>
         <div class="auth-tabs">
           <button type="button" data-tab="login"  class="${isSignup ? '' : 'active'}">Đăng nhập</button>
           <button type="button" data-tab="signup" class="${isSignup ? 'active' : ''}">Đăng ký</button>

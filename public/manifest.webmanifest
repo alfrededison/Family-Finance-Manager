@@ -1,7 +1,7 @@
 {
-  "name": "Quản lý Tài chính",
-  "short_name": "Tài chính",
-  "description": "Theo dõi tài sản và giao dịch cá nhân",
+  "name": "Tài chính Gia đình",
+  "short_name": "Tài chính GĐ",
+  "description": "Theo dõi và nhận cập nhật về tài sản của gia đình",
   "lang": "vi",
   "start_url": "/",
   "scope": "/",
