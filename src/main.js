@@ -29,7 +29,7 @@ async function router() {
     return;
   }
   const route = currentRoute();
-  document.querySelectorAll('.sidebar a, .bottom-nav-item').forEach((a) => {
+  document.querySelectorAll('.sidebar a, .bottom-nav-item, #header-settings').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
   });
   closeNav();
@@ -113,8 +113,7 @@ function renderUserChip() {
   if (!el || !currentUser) return;
   el.querySelector('.user-name').textContent = currentUser.name;
   el.querySelector('.user-email').textContent = currentUser.email;
-  const btn = el.querySelector('#btn-logout');
-  btn.onclick = logout;
+  el.querySelector('#btn-logout').onclick = logout;
 }
 
 export async function logout() {

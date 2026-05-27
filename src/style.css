@@ -93,9 +93,11 @@ body {
   overflow-y: auto;
 }
 .sidebar .brand {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   padding: 8px 12px 20px;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .sidebar a {
@@ -140,6 +142,7 @@ body {
 
 /* Auth-only screen: hide app chrome so only #view + login form show */
 body.auth-only #sidebar,
+body.auth-only #mobile-header,
 body.auth-only #bottom-nav,
 body.auth-only #nav-toggle,
 body.auth-only #nav-backdrop { display: none !important; }
@@ -657,6 +660,9 @@ input:focus, select:focus, textarea:focus {
 
 .loading { padding: 40px; text-align: center; color: var(--muted); }
 
+/* Mobile header (mobile only) */
+.mobile-header { display: none; }
+
 /* Bottom navbar (mobile only) */
 .bottom-nav { display: none; }
 
@@ -674,8 +680,51 @@ input:focus, select:focus, textarea:focus {
   .nav-toggle { display: none; }
   .sidebar { display: none; }
 
+  /* Mobile header — sticky brand bar at top */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--bg);
+    color: #fff;
+    padding: calc(10px + var(--safe-top)) 16px 10px;
+    padding-left: calc(16px + var(--safe-left));
+    padding-right: calc(16px + var(--safe-right));
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .mobile-header .brand {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mobile-header .icon-btn {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    text-decoration: none;
+  }
+  .mobile-header .icon-btn:hover { background: rgba(255,255,255,0.18); }
+  .mobile-header .icon-btn svg { width: 20px; height: 20px; }
+  .mobile-header .icon-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+
   main {
-    padding: calc(16px + var(--safe-top)) 16px calc(72px + var(--safe-bottom));
+    padding: 16px 16px calc(72px + var(--safe-bottom));
     padding-left: calc(16px + var(--safe-left));
     padding-right: calc(16px + var(--safe-right));
     max-width: 100%;
