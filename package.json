@@ -20,6 +20,6 @@
   "devDependencies": {
     "concurrently": "^9.2.1",
     "vite": "^5.4.0",
-    "wrangler": "^4.94.0"
+    "wrangler": "^4.95.0"
   }
 }
