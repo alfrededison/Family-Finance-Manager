@@ -57,26 +57,38 @@ export async function renderAssets(view) {
     <div class="section">
       <div class="toolbar">
         <input id="f-q" placeholder="Tìm kiếm theo tên..." value="${escapeHtml(initQ)}" style="flex:1; min-width:140px;" />
-        <select id="f-group">
-          <option value="">Tất cả nhóm</option>
-          ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
-        </select>
-        <select id="f-member">
-          <option value="">Tất cả thành viên</option>
-          ${members.map((m) => `<option value="${m.id}" ${String(m.id) === initMember ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
-        </select>
-        <select id="f-available">
-          <option value=""  ${initAvailable === ''  ? 'selected' : ''}>Tất cả</option>
-          <option value="1" ${initAvailable === '1' ? 'selected' : ''}>Khả dụng</option>
-          <option value="0" ${initAvailable === '0' ? 'selected' : ''}>Chưa khả dụng</option>
-        </select>
-        <select id="f-sort">
-          <option value="id-desc"      ${initSort === 'id-desc'      ? 'selected' : ''}>Mặc định</option>
-          <option value="maturity-asc" ${initSort === 'maturity-asc' ? 'selected' : ''}>Đáo hạn sớm nhất</option>
-          <option value="next-pay-asc" ${initSort === 'next-pay-asc' ? 'selected' : ''}>Trả lãi gần nhất</option>
-          <option value="value-desc"   ${initSort === 'value-desc'   ? 'selected' : ''}>Giá trị cao nhất</option>
-          <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
-        </select>
+        <div class="filter-with-icon">
+          <span class="filter-icon" aria-hidden="true">🗂️</span>
+          <select id="f-group">
+            <option value="">Tất cả nhóm</option>
+            ${ASSET_GROUPS.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === initGroup ? 'selected' : ''}>${escapeHtml(g.icon)} ${escapeHtml(g.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-with-icon">
+          <span class="filter-icon" aria-hidden="true">👤</span>
+          <select id="f-member">
+            <option value="">Tất cả thành viên</option>
+            ${members.map((m) => `<option value="${m.id}" ${String(m.id) === initMember ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-with-icon">
+          <span class="filter-icon" aria-hidden="true">💵</span>
+          <select id="f-available">
+            <option value=""  ${initAvailable === ''  ? 'selected' : ''}>Tất cả</option>
+            <option value="1" ${initAvailable === '1' ? 'selected' : ''}>Khả dụng</option>
+            <option value="0" ${initAvailable === '0' ? 'selected' : ''}>Chưa khả dụng</option>
+          </select>
+        </div>
+        <div class="filter-with-icon">
+          <span class="filter-icon" aria-hidden="true">↕️</span>
+          <select id="f-sort">
+            <option value="id-desc"      ${initSort === 'id-desc'      ? 'selected' : ''}>Mặc định</option>
+            <option value="maturity-asc" ${initSort === 'maturity-asc' ? 'selected' : ''}>Đáo hạn sớm nhất</option>
+            <option value="next-pay-asc" ${initSort === 'next-pay-asc' ? 'selected' : ''}>Trả lãi gần nhất</option>
+            <option value="value-desc"   ${initSort === 'value-desc'   ? 'selected' : ''}>Giá trị cao nhất</option>
+            <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
+          </select>
+        </div>
         <div class="view-toggle">
           <button id="f-view-grouped" class="small secondary ${initView === 'grouped' ? 'active' : ''}">Nhóm</button>
           <button id="f-view-flat"    class="small secondary ${initView === 'flat'    ? 'active' : ''}">Danh sách</button>

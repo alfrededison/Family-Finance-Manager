@@ -468,6 +468,25 @@ button.small { padding: 4px 10px; font-size: 12px; min-height: 28px; }
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
+.filter-with-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.filter-with-icon > .filter-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 1;
+}
+.filter-with-icon > select {
+  padding-left: 32px;
+}
 input, select, textarea {
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -813,7 +832,9 @@ input:focus, select:focus, textarea:focus {
 
   .toolbar { gap: 8px; }
   .toolbar > input,
-  .toolbar > select { flex: 1 1 100%; min-width: 0; }
+  .toolbar > select,
+  .toolbar > .filter-with-icon { flex: 1 1 100%; min-width: 0; }
+  .toolbar > .filter-with-icon > select { flex: 1 1 auto; min-width: 0; }
   .toolbar > .fetch-timestamp { flex: 1 1 100%; }
   #f-sort { flex: 1 1 auto; min-width: 0; }
   .view-toggle { flex: 0 0 auto; }
@@ -1032,16 +1053,35 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
   user-select: none;
 }
 
-/* ── View toggle ─────────────────────────────────────────────────────────── */
+/* ── View toggle (segmented button) ──────────────────────────────────────── */
 .view-toggle {
   display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+  min-height: 36px;
 }
-.view-toggle button:first-child {
-  border-radius: 6px 0 0 6px;
+.view-toggle button.secondary {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  margin: 0;
+  padding: 6px 14px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.view-toggle button:last-child {
-  border-radius: 0 6px 6px 0;
-  margin-left: -1px;
+.view-toggle button.secondary + button.secondary {
+  border-left: 1px solid var(--border);
+}
+.view-toggle button.secondary:hover {
+  background: var(--surface-2);
+  opacity: 1;
+}
+.view-toggle button.secondary.active {
+  background: var(--surface-2);
+  color: var(--primary);
+  font-weight: 600;
 }
 
 /* ── Summary bar ─────────────────────────────────────────────────────────── */
