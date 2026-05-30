@@ -65,15 +65,16 @@ export function computeAccrualPnl(a) {
 }
 
 // Forward-looking interest for cho-vay / đi-vay (no tax).
-// Returns null when inputs are insufficient.
+// Interest accrues on the remaining balance (current_price), not the original
+// principal (cost_price). Returns null when inputs are insufficient.
 export function computeLoanInterest(a) {
   if (a.interest_rate == null) return null;
-  const principal = a.cost_price || 0;
-  if (principal <= 0) return null;
+  const remaining = a.current_price || 0;
+  if (remaining <= 0) return null;
 
   const years = pickInterestYears(a);
   if (years <= 0) return 0;
-  return principal * (a.interest_rate / 100) * years;
+  return remaining * (a.interest_rate / 100) * years;
 }
 
 // Returns { value, cost, pnl, pnlPct } for an asset row.
@@ -94,8 +95,8 @@ export function computeAssetMetrics(a) {
     const value = (a.qty || 0) * (a.current_price || 0);
     const interest = computeLoanInterest(a);
     const pnl = interest == null ? null : (a.group_id === 'di-vay' ? -interest : interest);
-    const principal = a.cost_price || 0;
-    const pnlPct = pnl != null && principal > 0 ? (pnl / principal) * 100 : null;
+    const remaining = a.current_price || 0;
+    const pnlPct = pnl != null && remaining > 0 ? (pnl / remaining) * 100 : null;
     return { value, cost: value, pnl, pnlPct };
   }
   const value = (a.qty || 0) * (a.current_price || 0);
