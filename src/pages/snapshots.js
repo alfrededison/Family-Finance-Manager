@@ -292,11 +292,18 @@ function renderChart(dates, byDateKey, liabByDate, series, W) {
     1,
   );
   const yScale = innerH / maxY;
-  const xAt = (i) => PAD_L + (dates.length === 1 ? innerW / 2 : (i / (dates.length - 1)) * innerW);
+  // A single snapshot has no horizontal extent, so draw a full-width flat band
+  // instead of a degenerate vertical line at the centre.
+  const single = dates.length === 1;
+  const xAt = (i) => PAD_L + (single ? innerW / 2 : (i / (dates.length - 1)) * innerW);
   const yAt = (v) => PAD_T + innerH - v * yScale;
 
   // Asset area paths
   const areas = series.map((s) => {
+    if (single) {
+      const yTo = yAt(points[0].pos[s.key].to), yFrom = yAt(points[0].pos[s.key].from);
+      return `<rect x="${PAD_L.toFixed(2)}" y="${yTo.toFixed(2)}" width="${innerW.toFixed(2)}" height="${(yFrom - yTo).toFixed(2)}" fill="${s.color}" fill-opacity="${s.opacity.toFixed(2)}" />`;
+    }
     const top = points.map((p, i) => `${xAt(i).toFixed(2)},${yAt(p.pos[s.key].to).toFixed(2)}`);
     const bot = points.map((p, i) => `${xAt(i).toFixed(2)},${yAt(p.pos[s.key].from).toFixed(2)}`).reverse();
     return `<path d="M ${top.join(' L ')} L ${bot.join(' L ')} Z" fill="${s.color}" fill-opacity="${s.opacity.toFixed(2)}" />`;
@@ -305,7 +312,9 @@ function renderChart(dates, byDateKey, liabByDate, series, W) {
   // Liability line overlay (single polyline + dots at each data point).
   const liabColor = GROUP_COLORS[LIAB_GROUP] || '#ef4444';
   const liabMeta = findGroup(LIAB_GROUP);
-  const linePoints = points.map((p, i) => `${xAt(i).toFixed(2)},${yAt(p.liab).toFixed(2)}`).join(' ');
+  const linePoints = single
+    ? `${PAD_L.toFixed(2)},${yAt(points[0].liab).toFixed(2)} ${(W - PAD_R).toFixed(2)},${yAt(points[0].liab).toFixed(2)}`
+    : points.map((p, i) => `${xAt(i).toFixed(2)},${yAt(p.liab).toFixed(2)}`).join(' ');
   const liabLine = `
     <polyline class="snap-liab-line" points="${linePoints}" fill="none" stroke="${liabColor}" stroke-width="2.5" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round" />
     ${points.map((p, i) => `<circle cx="${xAt(i).toFixed(2)}" cy="${yAt(p.liab).toFixed(2)}" r="3" fill="${liabColor}" />`).join('')}
@@ -348,7 +357,9 @@ function renderChart(dates, byDateKey, liabByDate, series, W) {
 
     const lineCount = (areaLines + liabLineText).match(/<tspan/g)?.length || 0;
     const tooltipH = (lineCount + 2) * TT_LH + TT_PAD;
-    const flipLeft = i > dates.length / 2;
+    // Flip the tooltip to the left whenever drawing it on the right would
+    // overflow the chart's right edge (e.g. the last point in a 1–2 item set).
+    const flipLeft = x + 8 + TT_W > W - PAD_R;
 
     return `
       <g class="snap-hover">
