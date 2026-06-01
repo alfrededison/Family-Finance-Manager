@@ -139,13 +139,33 @@ async function runMerge(env, userId, payload) {
   }
 
   // user_settings — per-user upsert by (user_id, key)
+  // Integration instance configs embed member_id (numeric); members were
+  // re-inserted with fresh auto-IDs above, so remap those refs via memberMap.
   stats.user_settings = 0;
   for (const r of (payload.user_settings || [])) {
+    const value = /^integration\..+\.instances$/.test(r.key)
+      ? remapInstanceMembers(r.value, memberMap)
+      : r.value;
     await env.DB.prepare(
       'INSERT OR REPLACE INTO user_settings (user_id, key, value) VALUES (?, ?, ?)',
-    ).bind(userId, r.key, r.value).run();
+    ).bind(userId, r.key, value).run();
     stats.user_settings++;
   }
 
   return stats;
+}
+
+// Rewrite member_id refs inside an integration instances JSON value using the
+// old→new member id map. Returns the original string untouched on any failure
+// (malformed JSON, unexpected shape), so non-instance settings survive intact.
+function remapInstanceMembers(value, memberMap) {
+  let instances;
+  try { instances = JSON.parse(value); } catch { return value; }
+  if (!Array.isArray(instances)) return value;
+  for (const inst of instances) {
+    if (inst && inst.member_id != null) {
+      inst.member_id = memberMap[inst.member_id] ?? null;
+    }
+  }
+  return JSON.stringify(instances);
 }
