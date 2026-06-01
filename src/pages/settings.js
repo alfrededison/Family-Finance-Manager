@@ -37,99 +37,112 @@ export async function renderSettings(view) {
   view.innerHTML = `
     <div class="page-header"><h1>⚙️ Cài đặt</h1></div>
 
-    <div class="section">
-      <h2>👤 Tài khoản</h2>
-      <div id="account-info" style="margin-bottom:12px;"></div>
-      <form id="password-form" class="form-grid">
-        <label class="full">Mật khẩu hiện tại
-          <input name="current_password" type="password" required autocomplete="current-password" />
-        </label>
-        <label class="full">Mật khẩu mới (tối thiểu 8 ký tự)
-          <input name="new_password" type="password" required minlength="8" autocomplete="new-password" />
-        </label>
-        <div class="modal-actions full">
-          <button type="button" id="btn-logout-settings" class="secondary">Đăng xuất</button>
-          <button type="submit">Đổi mật khẩu</button>
+    <div class="segmented segmented--fill" role="tablist">
+      <button type="button" class="secondary active" data-tab="chung">Ứng dụng</button>
+      <button type="button" class="secondary" data-tab="nguoi-dung">Tài khoản</button>
+      <button type="button" class="secondary" data-tab="toan-cuc">Chung</button>
+    </div>
+
+    <div class="settings-panel" data-tab="chung">
+      <div class="section">
+        <h2>👤 Tài khoản</h2>
+        <div id="account-info" style="margin-bottom:12px;"></div>
+        <form id="password-form" class="form-grid">
+          <label class="full">Mật khẩu hiện tại
+            <input name="current_password" type="password" required autocomplete="current-password" />
+          </label>
+          <label class="full">Mật khẩu mới (tối thiểu 8 ký tự)
+            <input name="new_password" type="password" required minlength="8" autocomplete="new-password" />
+          </label>
+          <div class="modal-actions full">
+            <button type="button" id="btn-logout-settings" class="secondary">Đăng xuất</button>
+            <button type="submit">Đổi mật khẩu</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="section">
+        <h2>🔔 Thông báo nhắc nhở</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">
+          Nhắc hằng ngày khi có tài sản sắp đáo hạn, đến ngày nhận lãi (cho vay) hoặc trả lãi (đi vay).
+        </p>
+        <div id="notify-section"></div>
+      </div>
+
+      <div class="section">
+        <h2>Ứng dụng</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">Kiểm tra và áp dụng phiên bản mới nhất của ứng dụng.</p>
+        <p class="muted-sm" style="margin: -4px 0 12px; font-family: monospace;">
+          ${__GIT_SHA__} &mdash; ${__GIT_MESSAGE__}<br>
+          ${__GIT_TIMESTAMP__}
+        </p>
+        <div class="toolbar">
+          <button type="button" id="btn-force-reload">↺ Tải phiên bản mới nhất</button>
         </div>
-      </form>
-    </div>
-
-    <div class="section">
-      <h2>👥 Thành viên</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Quản lý thành viên dùng để gắn tài sản.</p>
-      <div id="member-list"></div>
-      <div class="toolbar" style="margin-top:12px;">
-        <button type="button" id="btn-new-member">+ Thêm thành viên</button>
       </div>
     </div>
 
-    <div class="section">
-      <h2>Nền tảng tiền gửi</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Danh sách dùng cho form Tiền gửi. Có thể thêm hoặc xoá tuỳ ý.</p>
-      <div id="platform-list" class="chip-list"></div>
-      <form id="platform-form" class="toolbar" style="margin-top:12px;">
-        <input id="platform-name" placeholder="Tên nền tảng (VD: Topi)" required style="flex:1; min-width:200px;" />
-        <button type="submit">+ Thêm nền tảng</button>
-      </form>
-    </div>
-
-    <div class="section">
-      <h2>Giá thị trường</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Nguồn dữ liệu giá thị trường.</p>
-      <div id="market-settings"></div>
-    </div>
-
-    <div class="section">
-      <h2>🔗 Tích hợp dịch vụ</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Kết nối TCBS, Topi... để đồng bộ tài sản tự động.</p>
-      <div id="integrations-section"></div>
-    </div>
-
-    <div class="section">
-      <h2>Sao lưu &amp; phục hồi (JSON)</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">
-        Xuất toàn bộ dữ liệu ra file JSON để sao lưu, hoặc nhập lại từ file đã xuất.
-      </p>
-
-      <div class="toolbar">
-        <button type="button" id="export-btn">⬇️ Xuất JSON</button>
+    <div class="settings-panel" data-tab="nguoi-dung" hidden>
+      <div class="section">
+        <h2>👥 Thành viên</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">Quản lý thành viên dùng để gắn tài sản.</p>
+        <div id="member-list"></div>
+        <div class="toolbar" style="margin-top:12px;">
+          <button type="button" id="btn-new-member">+ Thêm thành viên</button>
+        </div>
       </div>
 
-      <form id="import-form" class="toolbar" style="align-items:center;">
-        <input type="file" id="import-file" accept="application/json,.json" required />
-        <select id="import-mode">
-          <option value="replace">Replace — xoá hết rồi nạp lại</option>
-          <option value="merge">Merge — thêm vào dữ liệu hiện có</option>
-        </select>
-        <button type="submit" class="secondary">⬆️ Nhập JSON</button>
-      </form>
-      <p class="muted-sm">
-        Chế độ <b>Replace</b> giữ nguyên ID gốc — phù hợp khi khôi phục backup.
-        Chế độ <b>Merge</b> gán ID mới và nối tiếp dữ liệu cũ.
-      </p>
+      <div class="section">
+        <h2>🔗 Tích hợp dịch vụ</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">Kết nối TCBS, Topi... để đồng bộ tài sản tự động.</p>
+        <div id="integrations-section"></div>
+      </div>
+
+      <div class="section">
+        <h2>Sao lưu &amp; phục hồi (JSON)</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">
+          Xuất toàn bộ dữ liệu ra file JSON để sao lưu, hoặc nhập lại từ file đã xuất.
+        </p>
+
+        <div class="toolbar">
+          <button type="button" id="export-btn">⬇️ Xuất JSON</button>
+        </div>
+
+        <form id="import-form" class="toolbar" style="align-items:center;">
+          <input type="file" id="import-file" accept="application/json,.json" required />
+          <select id="import-mode">
+            <option value="replace">Replace — xoá hết rồi nạp lại</option>
+            <option value="merge">Merge — thêm vào dữ liệu hiện có</option>
+          </select>
+          <button type="submit" class="secondary">⬆️ Nhập JSON</button>
+        </form>
+        <p class="muted-sm">
+          Chế độ <b>Replace</b> giữ nguyên ID gốc — phù hợp khi khôi phục backup.
+          Chế độ <b>Merge</b> gán ID mới và nối tiếp dữ liệu cũ.
+        </p>
+      </div>
     </div>
 
-    <div class="section">
-      <h2>🔔 Thông báo nhắc nhở</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">
-        Nhắc hằng ngày khi có tài sản sắp đáo hạn, đến ngày nhận lãi (cho vay) hoặc trả lãi (đi vay).
-      </p>
-      <div id="notify-section"></div>
-    </div>
+    <div class="settings-panel" data-tab="toan-cuc" hidden>
+      <div class="section">
+        <h2>Nền tảng tiền gửi</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">Danh sách dùng cho form Tiền gửi. Có thể thêm hoặc xoá tuỳ ý.</p>
+        <div id="platform-list" class="chip-list"></div>
+        <form id="platform-form" class="toolbar" style="margin-top:12px;">
+          <input id="platform-name" placeholder="Tên nền tảng (VD: Topi)" required style="flex:1; min-width:200px;" />
+          <button type="submit">+ Thêm nền tảng</button>
+        </form>
+      </div>
 
-    <div class="section">
-      <h2>Ứng dụng</h2>
-      <p class="muted-sm" style="margin: -8px 0 12px;">Kiểm tra và áp dụng phiên bản mới nhất của ứng dụng.</p>
-      <p class="muted-sm" style="margin: -4px 0 12px; font-family: monospace;">
-        ${__GIT_SHA__} &mdash; ${__GIT_MESSAGE__}<br>
-        ${__GIT_TIMESTAMP__}
-      </p>
-      <div class="toolbar">
-        <button type="button" id="btn-force-reload">↺ Tải phiên bản mới nhất</button>
+      <div class="section">
+        <h2>Giá thị trường</h2>
+        <p class="muted-sm" style="margin: -8px 0 12px;">Nguồn dữ liệu giá thị trường.</p>
+        <div id="market-settings"></div>
       </div>
     </div>
   `;
 
+  setupTabs(view);
   renderAccount();
   document.getElementById('btn-logout-settings').onclick = logout;
   document.getElementById('password-form').onsubmit = onChangePassword;
@@ -166,6 +179,18 @@ export async function renderSettings(view) {
   document.getElementById('btn-force-reload').onclick = onForceReload;
   document.getElementById('export-btn').onclick = onExport;
   document.getElementById('import-form').onsubmit = onImport;
+}
+
+function setupTabs(view) {
+  const tabs = view.querySelectorAll('.segmented button');
+  const panels = view.querySelectorAll('.settings-panel');
+  tabs.forEach((btn) => {
+    btn.onclick = () => {
+      const target = btn.dataset.tab;
+      tabs.forEach((b) => b.classList.toggle('active', b === btn));
+      panels.forEach((p) => { p.hidden = p.dataset.tab !== target; });
+    };
+  });
 }
 
 function renderAccount() {

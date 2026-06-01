@@ -89,7 +89,7 @@ export async function renderAssets(view) {
             <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
           </select>
         </div>
-        <div class="view-toggle">
+        <div class="segmented">
           <button id="f-view-grouped" class="small secondary ${initView === 'grouped' ? 'active' : ''}">Nhóm</button>
           <button id="f-view-flat"    class="small secondary ${initView === 'flat'    ? 'active' : ''}">Danh sách</button>
         </div>

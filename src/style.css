@@ -837,7 +837,7 @@ input:focus, select:focus, textarea:focus {
   .toolbar > .filter-with-icon > select { flex: 1 1 auto; min-width: 0; }
   .toolbar > .fetch-timestamp { flex: 1 1 100%; }
   #f-sort { flex: 1 1 auto; min-width: 0; }
-  .view-toggle { flex: 0 0 auto; }
+  .segmented { flex: 0 0 auto; }
   .provider-price .muted-sm { display: block; }
 
   .form-grid {
@@ -1053,8 +1053,8 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
   user-select: none;
 }
 
-/* ── View toggle (segmented button) ──────────────────────────────────────── */
-.view-toggle {
+/* ── Segmented control (assets view toggle, settings tabs) ───────────────── */
+.segmented {
   display: inline-flex;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1062,7 +1062,7 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
   background: var(--surface);
   min-height: 36px;
 }
-.view-toggle button.secondary {
+.segmented button.secondary {
   border: none;
   border-radius: 0;
   background: transparent;
@@ -1071,18 +1071,21 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
   padding: 6px 14px;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
-.view-toggle button.secondary + button.secondary {
+.segmented button.secondary + button.secondary {
   border-left: 1px solid var(--border);
 }
-.view-toggle button.secondary:hover {
+.segmented button.secondary:hover {
   background: var(--surface-2);
   opacity: 1;
 }
-.view-toggle button.secondary.active {
+.segmented button.secondary.active {
   background: var(--surface-2);
   color: var(--primary);
   font-weight: 600;
 }
+/* full-width variant — segments stretch to fill (settings tabs) */
+.segmented--fill { display: flex; margin-bottom: 16px; }
+.segmented--fill button { flex: 1; }
 
 /* ── Summary bar ─────────────────────────────────────────────────────────── */
 .summary-bar {
