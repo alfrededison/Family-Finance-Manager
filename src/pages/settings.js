@@ -935,16 +935,33 @@ function openInstanceModal(serviceId, existing, members) {
 // ─── Bookmarklet generator ────────────────────────────────────────────────────
 
 function tcbsBookmarklet() {
-  // Đọc token từ localStorage['userInfo'], copy vào clipboard
+  // Đọc token + TCBSId + custodyId từ localStorage['userInfo'],
+  // hiển thị panel nổi (góc phải) cho phép copy từng giá trị.
   const code = `(function(){
 var raw=localStorage.getItem('userInfo');
 if(!raw){alert('Không tìm thấy userInfo.\\nHãy đăng nhập TCBS trước.');return;}
-var token;
-try{token=JSON.parse(raw).authToken;}catch(x){}
+var info;
+try{info=JSON.parse(raw);}catch(x){}
+if(!info){alert('Lỗi đọc userInfo.');return;}
+var token=info.authToken||'';
+var tcbsId=info.TCBSId||info.tcbsId||'';
+var custodyId=info.custodyId||info.custodyID||'';
 if(!token){alert('Không tìm thấy authToken trong userInfo.');return;}
 var exp='';
-try{var p=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(p.exp)exp=' (hết hạn: '+new Date(p.exp*1000).toLocaleDateString('vi-VN')+')';}catch(x){}
-navigator.clipboard.writeText(token).then(function(){alert('✅ Token TCBS'+exp+'\\nĐã copy! Dán vào ô "Cập nhật token" trên Finance App.');}).catch(function(){prompt('Copy token này:',token);});
+try{var p=JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));if(p.exp)exp=new Date(p.exp*1000).toLocaleString('vi-VN');}catch(x){}
+function copy(v,btn){navigator.clipboard.writeText(v).then(function(){var t=btn.textContent;btn.textContent='✅';setTimeout(function(){btn.textContent=t;},1200);}).catch(function(){prompt('Copy:',v);});}
+function row(label,val){
+  if(!val)return '';
+  return '<div style="margin-bottom:10px"><div style="font-weight:600;color:#374151;margin-bottom:3px">'+label+'</div><div style="display:flex;gap:6px;align-items:center"><code style="flex:1;min-width:0;background:#f3f4f6;padding:4px 8px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+val+'">'+val+'</code><button data-v="'+encodeURIComponent(val)+'" style="cursor:pointer;border:none;background:#10b981;color:#fff;padding:4px 10px;border-radius:5px">📋</button></div></div>';
+}
+var old=document.getElementById('__tcbsPanel');if(old)old.remove();
+var box=document.createElement('div');
+box.id='__tcbsPanel';
+box.style.cssText='position:fixed;top:12px;right:12px;z-index:2147483647;background:#fff;color:#111;padding:14px 16px;border-radius:10px;font:13px/1.5 sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.25);width:300px;border:1px solid #e5e7eb';
+box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong style="color:#10b981">TCBS — Copy thông tin</strong><span id="__tcbsClose" style="cursor:pointer;color:#9ca3af;font-size:18px;line-height:1">×</span></div>'+row('TCBS ID',tcbsId)+row('Custody Code',custodyId)+row('Token'+(exp?' (HH: '+exp+')':''),token);
+document.body.appendChild(box);
+box.querySelector('#__tcbsClose').onclick=function(){box.remove();};
+Array.prototype.forEach.call(box.querySelectorAll('button[data-v]'),function(b){b.onclick=function(){copy(decodeURIComponent(b.getAttribute('data-v')),b);};});
 })()`;
   return 'javascript:' + encodeURIComponent(code);
 }
@@ -1024,8 +1041,8 @@ function openBookmarkletModal(serviceId, def) {
     'Upload file đó vào Finance App qua nút 📂 Import',
   ] : [
     `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
-    'Click bookmark → token tự động copy vào clipboard',
-    'Dán vào ô "Cập nhật token" 🔑 trên Finance App',
+    'Click bookmark → panel hiện ở góc phải với <b>TCBS ID</b>, <b>Custody Code</b> và <b>Token</b>',
+    'Click 📋 để copy từng giá trị — dán vào form tạo integration / ô "Cập nhật token" 🔑',
   ];
 
   openModal(`
