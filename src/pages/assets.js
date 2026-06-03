@@ -130,7 +130,7 @@ export async function renderAssets(view) {
     const sorted = sortAssets(currentAssets, getSort());
     const vw = getViewMode();
     document.getElementById('asset-list').innerHTML =
-      renderSummaryBar(currentAssets) +
+      renderSummaryBar(sorted) +
       (vw === 'grouped'
         ? renderGroupedView(sorted)
         : renderFlatView(sorted, currentPage));
@@ -193,8 +193,15 @@ function sortAssets(assets, sortBy) {
   const copy = [...assets];
   const matKey = (a) => a.maturity_date || '9999-99-99';
   const nextPayKey = (a) => nextInterestPaymentDate(a) || '9999-99-99';
-  if (sortBy === 'maturity-asc') return copy.sort((a, b) => matKey(a).localeCompare(matKey(b)));
-  if (sortBy === 'next-pay-asc') return copy.sort((a, b) => nextPayKey(a).localeCompare(nextPayKey(b)));
+  // Date-based sorts only show assets that actually have the relevant date.
+  if (sortBy === 'maturity-asc') {
+    return copy.filter((a) => a.maturity_date)
+               .sort((a, b) => matKey(a).localeCompare(matKey(b)));
+  }
+  if (sortBy === 'next-pay-asc') {
+    return copy.filter((a) => nextInterestPaymentDate(a))
+               .sort((a, b) => nextPayKey(a).localeCompare(nextPayKey(b)));
+  }
   if (sortBy === 'value-desc')   return copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   if (sortBy === 'pnl-desc')     return copy.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity));
   return copy;
