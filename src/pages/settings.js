@@ -575,16 +575,20 @@ function parseInstances(raw) {
   try { return Array.isArray(raw) ? raw : JSON.parse(raw); } catch { return []; }
 }
 
-function jwtExpiry(token) {
+function jwtPayload(token) {
   if (!token) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   try {
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return payload.exp ? new Date(payload.exp * 1000) : null;
+    return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
   } catch {
     return null;
   }
+}
+
+function jwtExpiry(token) {
+  const payload = jwtPayload(token);
+  return payload?.exp ? new Date(payload.exp * 1000) : null;
 }
 
 function renderInstanceCard(serviceId, def, inst, members) {
@@ -606,6 +610,27 @@ function renderInstanceCard(serviceId, def, inst, members) {
         : `<span class="badge pos">Còn hạn · ${escapeHtml(timeStr)}</span>`;
     }
   }
+
+  const metaRows = [];
+  if (serviceId === 'tcbs') {
+    const payload = jwtPayload(inst.token) || {};
+    if (inst.custody_code) {
+      const match = payload.custodyID && String(payload.custodyID) === inst.custody_code
+        ? ` <span class="custody-match" title="Khớp với token">✅</span>`
+        : '';
+      metaRows.push(`<span>Custody ID: <code>${escapeHtml(inst.custody_code)}</code>${match}</span>`);
+    }
+    if (inst.tcbs_id) {
+      const match = payload.tcbsId && String(payload.tcbsId) === inst.tcbs_id
+        ? ` <span class="custody-match" title="Khớp với token">✅</span>`
+        : '';
+      metaRows.push(`<span>TCBS ID: <code>${escapeHtml(inst.tcbs_id)}</code>${match}</span>`);
+    }
+    if (payload.email) metaRows.push(`<span>Email: <code>${escapeHtml(payload.email)}</code></span>`);
+  }
+  const metaLine = metaRows.length
+    ? `<div class="instance-meta">${metaRows.join('')}</div>`
+    : '';
 
   const checkboxes = def.assetTypes.map((t) => `
     <label class="check-label">
@@ -640,6 +665,7 @@ function renderInstanceCard(serviceId, def, inst, members) {
         </form>
       </div>` : ''}
       <div class="instance-body">
+        ${metaLine}
         <div class="asset-type-checklist">
           ${checkboxes}
         </div>
