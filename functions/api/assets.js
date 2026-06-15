@@ -8,9 +8,12 @@ export async function onRequestGet({ env, request, data }) {
     const member = url.searchParams.get('member');
     const subtype = url.searchParams.get('subtype');
     const q = url.searchParams.get('q');
+    const status = url.searchParams.get('status');
 
-    const where = ["a.status = 'active'", 'a.user_id = ?'];
+    // Default to active only; status=all includes soft-deleted/closed assets.
+    const where = ['a.user_id = ?'];
     const params = [data.user.id];
+    if (status !== 'all') where.push("a.status = 'active'");
     if (group)   { where.push('a.group_id = ?'); params.push(String(group)); }
     if (member)  { where.push('a.member_id = ?'); params.push(Number(member)); }
     if (subtype) { where.push('a.subtype = ?'); params.push(String(subtype)); }

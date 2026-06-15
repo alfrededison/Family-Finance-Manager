@@ -1,11 +1,13 @@
 import { json, error } from '../_utils.js';
 
-// GET /api/asset-deltas?asset=&type=&page=1&limit=50
+// GET /api/asset-deltas?asset=&type=&source=&page=1&limit=50
+// `source` accepts a category: 'manual' | 'sync' | 'market'.
 export async function onRequestGet({ env, request, data }) {
   try {
     const url = new URL(request.url);
-    const asset = url.searchParams.get('asset');
-    const type  = url.searchParams.get('type');
+    const asset  = url.searchParams.get('asset');
+    const type   = url.searchParams.get('type');
+    const source = url.searchParams.get('source');
     const page  = Math.max(1, Number(url.searchParams.get('page') || 1));
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     const offset = (page - 1) * limit;
@@ -14,6 +16,8 @@ export async function onRequestGet({ env, request, data }) {
     const params = [data.user.id];
     if (asset) { where.push('ad.asset_id = ?'); params.push(Number(asset)); }
     if (type)  { where.push('ad.type = ?');     params.push(type); }
+    if (source === 'manual') { where.push('ad.source = ?');    params.push('manual'); }
+    else if (source)         { where.push('ad.source LIKE ?'); params.push(`${source}:%`); }
 
     const whereSQL = 'WHERE ' + where.join(' AND ');
 

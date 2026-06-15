@@ -6,7 +6,8 @@ const PAGE_SIZE = 50;
 const DROPDOWN_LIMIT = 50;
 
 export async function renderAssetDeltas(view) {
-  const rawAssets = await api.get('/assets');
+  // Include soft-deleted assets so their history can still be filtered.
+  const rawAssets = await api.get('/assets?status=all');
   const assets = rawAssets.map(enrichAsset);
 
   view.innerHTML = `
@@ -23,6 +24,12 @@ export async function renderAssetDeltas(view) {
           <option value="edit">Cập nhật</option>
           <option value="delete">Xoá</option>
         </select>
+        <select id="f-source" style="min-width:140px;">
+          <option value="">Tất cả nguồn</option>
+          <option value="manual">Thủ công</option>
+          <option value="sync">Tích hợp</option>
+          <option value="market">Thị trường</option>
+        </select>
       </div>
 
       <div id="ph-list"></div>
@@ -33,11 +40,13 @@ export async function renderAssetDeltas(view) {
   let currentPage = 1;
 
   const load = async () => {
-    const asset = document.getElementById('f-asset-val').value;
-    const type  = document.getElementById('f-type').value;
+    const asset  = document.getElementById('f-asset-val').value;
+    const type   = document.getElementById('f-type').value;
+    const source = document.getElementById('f-source').value;
     const params = new URLSearchParams({ page: currentPage, limit: PAGE_SIZE });
-    if (asset) params.set('asset', asset);
-    if (type)  params.set('type', type);
+    if (asset)  params.set('asset', asset);
+    if (type)   params.set('type', type);
+    if (source) params.set('source', source);
 
     document.getElementById('ph-list').innerHTML = '<div class="loading">Đang tải...</div>';
     const { rows, total } = await api.get('/asset-deltas?' + params.toString());
@@ -59,6 +68,7 @@ export async function renderAssetDeltas(view) {
   }
 
   document.getElementById('f-type').onchange = () => { currentPage = 1; load(); };
+  document.getElementById('f-source').onchange = () => { currentPage = 1; load(); };
 
   bindAssetDropdown(assets, () => { currentPage = 1; load(); });
 
@@ -97,11 +107,15 @@ function bindAssetDropdown(assets, onChange) {
     const hasMore = matched.length > DROPDOWN_LIMIT;
 
     let html = `<div class="bank-row" data-val="" data-label="Tất cả tài sản">Tất cả tài sản</div>`;
-    html += shown.map((a) => `
-      <div class="bank-row" data-val="${a.id}" data-label="${escapeHtml(a.name)}">
-        ${escapeHtml(a.group_icon)} ${escapeHtml(a.name)}
+    html += shown.map((a) => {
+      const deleted = a.status === 'deleted';
+      const label = a.name + (deleted ? ' (đã xoá)' : '');
+      return `
+      <div class="bank-row" data-val="${a.id}" data-label="${escapeHtml(label)}">
+        ${escapeHtml(a.group_icon)} ${escapeHtml(a.name)}${deleted ? ' <span class="muted-sm">(đã xoá)</span>' : ''}
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     if (!q && assets.length > DROPDOWN_LIMIT) {
       html += `<div class="bank-row" style="color:var(--muted); font-style:italic; cursor:default;">... (${assets.length} tài sản, hãy tìm kiếm)</div>`;
