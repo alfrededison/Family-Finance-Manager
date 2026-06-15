@@ -22,7 +22,7 @@ metadata:
 
 ## Tenancy Model
 
-Mỗi user có dữ liệu riêng. Các bảng per-user (`members`, `assets`, `asset_snapshots`, `user_settings`, `push_subscriptions`) đều có cột `user_id`. Các bảng global (`platforms`, `settings` cho market provider config + VAPID public key) shared giữa users. `price_history` inherit tenancy qua `assets.user_id` (không có cột riêng). `push_subscriptions` dùng composite `UNIQUE(user_id, endpoint)` — cùng device có thể subscribe dưới nhiều user khác nhau.
+Mỗi user có dữ liệu riêng. Các bảng per-user (`members`, `assets`, `asset_snapshots`, `user_settings`, `push_subscriptions`) đều có cột `user_id`. Các bảng global (`platforms`, `settings` cho market provider config + VAPID public key) shared giữa users. `asset_deltas` inherit tenancy qua `assets.user_id` (không có cột riêng). `push_subscriptions` dùng composite `UNIQUE(user_id, endpoint)` — cùng device có thể subscribe dưới nhiều user khác nhau.
 
 ## File Layout
 
@@ -36,7 +36,7 @@ appscript/
 │   ├── pages/
 │   │   ├── dashboard.js
 │   │   ├── assets.js
-│   │   ├── price-history.js
+│   │   ├── asset-deltas.js
 │   │   ├── snapshots.js          # Weekly asset snapshots view
 │   │   ├── settings.js           # Có "Tài khoản" section (đổi mật khẩu + logout)
 │   │   └── login.js              # Tabbed login/signup form
@@ -65,7 +65,7 @@ appscript/
 │       │   ├── subscribe.js      # POST upsert / DELETE per (user_id, endpoint)
 │       │   └── test.js           # POST — gửi thử notification cho current user
 │       ├── user-settings.js      # GET/POST per-user K/V (integrations + notify prefs sống ở đây)
-│       ├── price-history.js
+│       ├── asset-deltas.js       # GET — lịch sử thay đổi tài sản (changes JSON), filter asset/type + phân trang
 │       ├── assets.js
 │       ├── assets/[id].js
 │       ├── members.js
@@ -73,7 +73,7 @@ appscript/
 │       ├── settings.js           # Global (chỉ market.* — reject integration.*)
 │       ├── providers.js
 │       ├── dashboard.js
-│       ├── export.js             # Per-user dump (members, assets, price_history, asset_snapshots, user_settings) + global platforms
+│       ├── export.js             # Per-user dump (members, assets, asset_deltas, asset_snapshots, user_settings) + global platforms
 │       ├── import.js             # Replace wipe per-user, inject user_id vào mọi row
 │       ├── sync.js               # TCBS/Topi sync — đọc instances từ user_settings
 │       ├── snapshots.js          # List/query snapshots (per-user)
@@ -93,7 +93,7 @@ appscript/
 │   ├── setup.sh                  # Initial setup
 │   ├── generate-vapid.sh         # Sinh VAPID keypair (ECDH P-256 → base64url) cho Web Push
 │   └── generate-icons.sh         # Build PWA icons from base_logo.png
-├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, price_history, settings, asset_snapshots)
+├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, asset_deltas, settings, asset_snapshots)
 ├── demo.sql                      # Seed / initial data — demo có 1 user (demo@example.com / demo1234)
 ├── wrangler.toml                 # Pages config (DB binding, build output dir, ALLOW_SIGNUP nếu mở signup)
 ├── vite.config.js                # Dev proxy /api/ → :8788; injects git info + SW cache version
@@ -106,7 +106,7 @@ Hash-based client-side routing trong `main.js`. Khi load, `bootstrap()` gọi `G
 - **200** → set `currentUser`, gắn user chip vào sidebar, gọi `router()` để render route hiện tại.
 - **401** → set `body.auth-only` (ẩn sidebar/bottom-nav/nav-toggle), render `renderLogin(view)`.
 
-Routes: `dashboard`, `assets`, `price-history`, `snapshots`, `settings`. Default: `dashboard`. Sidebar và bottom-nav active state đồng bộ với route.
+Routes: `dashboard`, `assets`, `asset-deltas`, `snapshots`, `settings`. Default: `dashboard`. Sidebar và bottom-nav active state đồng bộ với route.
 
 ## Shared Utils (export từ main.js)
 

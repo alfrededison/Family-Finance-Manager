@@ -1,4 +1,4 @@
-import { json, error, readBody, nowISO, computeAssetMetrics } from '../_utils.js';
+import { json, error, readBody, nowISO, computeAssetMetrics, snapshotAssetFields, recordAssetDelta } from '../_utils.js';
 
 // GET /api/assets?group=&member=&subtype=&q=
 export async function onRequestGet({ env, request, data }) {
@@ -76,12 +76,18 @@ export async function onRequestPost({ env, request, data }) {
     ).run();
 
     const id = result.meta.last_row_id;
-    await env.DB.prepare(
-      'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(id, Number(b.current_price || b.cost_price || 0), now, 'manual', 'create', b.notes || null).run();
-
     const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
       .bind(id, data.user.id).first();
+
+    await recordAssetDelta(env, {
+      assetId: id,
+      type: 'create',
+      changes: snapshotAssetFields(row),
+      source: 'manual',
+      note: b.notes || null,
+      now,
+    });
+
     return json(row, 201);
   } catch (err) {
     return error(err.message, 500);

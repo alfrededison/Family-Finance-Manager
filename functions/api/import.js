@@ -28,9 +28,9 @@ export async function onRequestPost({ env, request, data }) {
 // ── Replace mode ───────────────────────────────────────────────────────────
 // Wipe the user's own rows, then re-insert from payload (new auto-IDs).
 async function runReplace(env, userId, payload) {
-  // price_history → first (FK to assets), but filter via assets join.
+  // asset_deltas → first (FK to assets), but filter via assets join.
   await env.DB.prepare(`
-    DELETE FROM price_history WHERE asset_id IN (SELECT id FROM assets WHERE user_id = ?)
+    DELETE FROM asset_deltas WHERE asset_id IN (SELECT id FROM assets WHERE user_id = ?)
   `).bind(userId).run();
   await env.DB.prepare('DELETE FROM asset_snapshots WHERE user_id = ?').bind(userId).run();
   await env.DB.prepare('DELETE FROM assets WHERE user_id = ?').bind(userId).run();
@@ -99,23 +99,22 @@ async function runMerge(env, userId, payload) {
     stats.assets++;
   }
 
-  // price_history
-  stats.price_history = 0;
-  for (const r of (payload.price_history || [])) {
+  // asset_deltas
+  stats.asset_deltas = 0;
+  for (const r of (payload.asset_deltas || [])) {
     const assetId = assetMap[r.asset_id];
     if (assetId == null) continue;
     await env.DB.prepare(
-      'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO asset_deltas (asset_id, type, changes, recorded_at, source, note) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(
       assetId,
-      Number(r.price || 0),
-      r.old_price ?? null,
+      r.type || 'edit',
+      r.changes ?? null,
       r.recorded_at || nowISO(),
       r.source || 'manual',
-      r.type || 'edit',
       r.note ?? null,
     ).run();
-    stats.price_history++;
+    stats.asset_deltas++;
   }
 
   // asset_snapshots

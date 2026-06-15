@@ -93,7 +93,7 @@ The worker in [`worker/`](worker/) handles two scheduled jobs, dispatched by
 1. Calls every market-data provider (DOJI, TyGiaUSD, Techcombank, VPS)
    **once**, then applies the resulting prices to **all users' assets** in
    single bulk SQL updates — no per-user HTTP traffic, no per-user loop on
-   the asset writes. Changes are logged to `price_history`.
+   the asset writes. Changes are logged to `asset_deltas`.
 2. Loops over every user and aggregates their active assets by
    `(user_id, group_id, subtype)`, upserting one row per bucket into
    `asset_snapshots` for the **📈 Tăng trưởng** page.
@@ -137,7 +137,7 @@ force both wrangler instances onto the same local D1 file.
 ```
 .
 ├── src/                    # vanilla JS frontend (Vite)
-│   ├── pages/              # dashboard, assets, price-history, snapshots, settings, login
+│   ├── pages/              # dashboard, assets, asset-deltas, snapshots, settings, login
 │   ├── components/         # bank-select, platform-select
 │   ├── api.js              # fetch wrapper — credentials:'include' + 401 → login redirect
 │   └── data/groups.js      # hard-coded asset groups + subtypes

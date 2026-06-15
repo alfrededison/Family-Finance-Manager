@@ -1,5 +1,19 @@
 import { nowISO } from '../_utils.js';
 
+// Build the asset_deltas INSERT statement for a current_price change.
+function priceDeltaStmt(env, assetId, oldPrice, newPrice, now, source) {
+  return env.DB.prepare(
+    'INSERT INTO asset_deltas (asset_id, type, changes, recorded_at, source, note) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(
+    assetId,
+    'edit',
+    JSON.stringify([{ field: 'current_price', old: oldPrice, new: newPrice }]),
+    now,
+    source,
+    null,
+  );
+}
+
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
 async function extractCells(url, cssSelector, limit = Infinity) {
@@ -159,11 +173,10 @@ async function fetchOnePerTicker(env, provider, subtype, now, userId) {
         env.DB.prepare("UPDATE assets SET current_price = ?, updated_at = ? WHERE id = ?")
           .bind(price, now, asset.id),
       );
-      stmts.push(
-        env.DB.prepare(
-          'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, ?)',
-        ).bind(asset.id, price, asset.current_price, now, `market:${provider.id}`, 'edit'),
-      );
+      // Only record a delta when the price actually changed.
+      if (Number(price) !== Number(asset.current_price)) {
+        stmts.push(priceDeltaStmt(env, asset.id, asset.current_price, price, now, `market:${provider.id}`));
+      }
       assetsUpdated++;
     }
     if (stmts.length > 0) {
@@ -233,11 +246,9 @@ export async function fetchOne(env, providerId, subtype, userId) {
 
     if (assetsUpdated > 0) {
       const source = `market:${providerId}`;
-      const stmts = (assetRows.results || []).map((a) =>
-        env.DB.prepare(
-          'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, ?)',
-        ).bind(a.id, prices.price, a.current_price, now, source, 'edit'),
-      );
+      const stmts = (assetRows.results || [])
+        .filter((a) => Number(prices.price) !== Number(a.current_price))
+        .map((a) => priceDeltaStmt(env, a.id, a.current_price, prices.price, now, source));
       if (stmts.length > 0) await env.DB.batch(stmts);
 
       await env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')

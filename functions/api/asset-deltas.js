@@ -1,6 +1,6 @@
 import { json, error } from '../_utils.js';
 
-// GET /api/price-history?asset=&type=&page=1&limit=50
+// GET /api/asset-deltas?asset=&type=&page=1&limit=50
 export async function onRequestGet({ env, request, data }) {
   try {
     const url = new URL(request.url);
@@ -12,25 +12,25 @@ export async function onRequestGet({ env, request, data }) {
 
     const where = ['a.user_id = ?'];
     const params = [data.user.id];
-    if (asset) { where.push('ph.asset_id = ?'); params.push(Number(asset)); }
-    if (type)  { where.push('ph.type = ?');     params.push(type); }
+    if (asset) { where.push('ad.asset_id = ?'); params.push(Number(asset)); }
+    if (type)  { where.push('ad.type = ?');     params.push(type); }
 
     const whereSQL = 'WHERE ' + where.join(' AND ');
 
     const [dataRes, countRes] = await Promise.all([
       env.DB.prepare(`
-        SELECT ph.id, ph.asset_id, ph.price, ph.old_price, ph.recorded_at, ph.source, ph.type, ph.note,
+        SELECT ad.id, ad.asset_id, ad.type, ad.changes, ad.recorded_at, ad.source, ad.note,
                a.name AS asset_name, a.group_id AS asset_group
-        FROM price_history ph
-        JOIN assets a ON a.id = ph.asset_id
+        FROM asset_deltas ad
+        JOIN assets a ON a.id = ad.asset_id
         ${whereSQL}
-        ORDER BY ph.recorded_at DESC, ph.id DESC
+        ORDER BY ad.recorded_at DESC, ad.id DESC
         LIMIT ? OFFSET ?
       `).bind(...params, limit, offset).all(),
       env.DB.prepare(`
         SELECT COUNT(*) AS total
-        FROM price_history ph
-        JOIN assets a ON a.id = ph.asset_id
+        FROM asset_deltas ad
+        JOIN assets a ON a.id = ad.asset_id
         ${whereSQL}
       `).bind(...params).first(),
     ]);

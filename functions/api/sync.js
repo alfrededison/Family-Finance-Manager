@@ -1,4 +1,4 @@
-import { json, error, readBody, nowISO } from '../_utils.js';
+import { json, error, readBody, nowISO, diffAssetFields, snapshotAssetFields, recordAssetDelta } from '../_utils.js';
 
 const TCBS_BASE = 'https://apiext.tcbs.com.vn';
 
@@ -70,13 +70,18 @@ export async function onRequestDelete({ env, request, data }) {
     const now = nowISO();
 
     const affected = await env.DB.prepare(
-      `SELECT id, current_price FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ?`,
+      `SELECT * FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ?`,
     ).bind(userId, `${prefix}%`).all();
 
     for (const a of (affected.results ?? [])) {
-      await env.DB.prepare(
-        `INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, 'delete', ?)`
-      ).bind(a.id, a.current_price ?? 0, now, `sync:${service}`, 'Đã xoá (ngắt kết nối tích hợp)').run();
+      await recordAssetDelta(env, {
+        assetId: a.id,
+        type: 'delete',
+        changes: snapshotAssetFields(a),
+        source: `sync:${service}`,
+        note: 'Đã xoá (ngắt kết nối tích hợp)',
+        now,
+      });
     }
 
     await env.DB.prepare(
@@ -318,16 +323,16 @@ async function upsertAssets(env, userId, service, instance, incomingItems, opts)
   const now = nowISO();
 
   // Load existing active assets owned by this instance (for this user) in the target group/subtype.
-  let existingQuery = `SELECT id, notes, current_price FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ? AND group_id = ?`;
+  let existingQuery = `SELECT * FROM assets WHERE status = 'active' AND user_id = ? AND notes LIKE ? AND group_id = ?`;
   const existingParams = [userId, `${prefix}%`, groupId];
   if (subtype) { existingQuery += ` AND subtype = ?`; existingParams.push(subtype); }
   const existingRows = await env.DB.prepare(existingQuery).bind(...existingParams).all();
 
-  // Map: upsert-key → { id, currentPrice }
+  // Map: upsert-key → full asset row (used to diff every changed field)
   const existingMap = new Map();
   for (const row of (existingRows.results ?? [])) {
     const key = parseKey(row.notes);
-    if (key) existingMap.set(key, { id: row.id, currentPrice: row.current_price });
+    if (key) existingMap.set(key, row);
   }
 
   let added = 0, updated = 0, removed = 0;
@@ -342,7 +347,8 @@ async function upsertAssets(env, userId, service, instance, incomingItems, opts)
     const notes = buildNotes(service, instance.id, keyType, keyValue);
 
     if (existingMap.has(String(keyValue))) {
-      const { id, currentPrice: oldPrice } = existingMap.get(String(keyValue));
+      const before = existingMap.get(String(keyValue));
+      const id = before.id;
       await env.DB.prepare(`
         UPDATE assets SET
           name = ?, qty = ?, cost_price = ?, current_price = ?,
@@ -368,9 +374,28 @@ async function upsertAssets(env, userId, service, instance, incomingItems, opts)
         id,
         userId,
       ).run();
-      await env.DB.prepare(
-        `INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type) VALUES (?, ?, ?, ?, ?, 'edit')`
-      ).bind(id, a.current_price ?? 0, oldPrice ?? null, now, `sync:${service}`).run();
+      // Record only the fields that actually changed; unchanged re-syncs add no delta.
+      const after = {
+        name: a.name,
+        qty: a.qty ?? null,
+        cost_price: a.cost_price ?? 0,
+        current_price: a.current_price ?? 0,
+        interest_rate: a.interest_rate ?? null,
+        interest_tax_rate: a.interest_tax_rate ?? null,
+        term: a.term ?? null,
+        start_date: a.start_date ?? null,
+        maturity_date: a.maturity_date ?? null,
+        subtype: a.subtype ?? null,
+        member_id: memberId,
+        ticker: a.ticker ?? null,
+      };
+      await recordAssetDelta(env, {
+        assetId: id,
+        type: 'edit',
+        changes: diffAssetFields(before, after),
+        source: `sync:${service}`,
+        now,
+      });
       updated++;
     } else {
       const result = await env.DB.prepare(`
@@ -402,22 +427,30 @@ async function upsertAssets(env, userId, service, instance, incomingItems, opts)
         now,
         now,
       ).run();
-      await env.DB.prepare(
-        `INSERT INTO price_history (asset_id, price, recorded_at, source, type) VALUES (?, ?, ?, ?, 'create')`
-      ).bind(result.meta.last_row_id, a.current_price ?? 0, now, `sync:${service}`).run();
+      await recordAssetDelta(env, {
+        assetId: result.meta.last_row_id,
+        type: 'create',
+        changes: snapshotAssetFields({ ...a, member_id: memberId }),
+        source: `sync:${service}`,
+        now,
+      });
       added++;
     }
   }
 
   // Soft-delete positions that disappeared from the API response
-  for (const [key, { id, currentPrice }] of existingMap) {
+  for (const [key, before] of existingMap) {
     if (!seenKeys.has(key)) {
       await env.DB.prepare(
         `UPDATE assets SET status = 'deleted', updated_at = ? WHERE id = ? AND user_id = ?`
-      ).bind(now, id, userId).run();
-      await env.DB.prepare(
-        `INSERT INTO price_history (asset_id, price, recorded_at, source, type) VALUES (?, ?, ?, ?, 'delete')`
-      ).bind(id, currentPrice ?? 0, now, `sync:${service}`).run();
+      ).bind(now, before.id, userId).run();
+      await recordAssetDelta(env, {
+        assetId: before.id,
+        type: 'delete',
+        changes: snapshotAssetFields(before),
+        source: `sync:${service}`,
+        now,
+      });
       removed++;
     }
   }

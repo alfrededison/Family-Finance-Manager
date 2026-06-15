@@ -612,3 +612,44 @@ INSERT INTO asset_snapshots (user_id, recorded_at, snapshot_date, group_id, subt
   (1, '2026-05-25T17:00:00.000Z', '2026-05-25', 'tien-gui', 'tg-linh-hoat', 102000000, 102000000, 1),
   (1, '2026-05-25T17:00:00.000Z', '2026-05-25', 'bank', 'tk-tu-do', 30000000, 30600000, 2),
   (1, '2026-05-25T17:00:00.000Z', '2026-05-25', 'bank', 'so-tiet-kiem', 100000000, 102000000, 1);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ASSET DELTAS / Lịch sử thay đổi tài sản
+-- Phủ mọi case hiển thị: create (snapshot) | edit (diff nhiều/1 trường) | delete
+-- × nguồn manual | market:* | sync:* . changes = JSON [{field, old, new}].
+-- asset_id theo thứ tự insert: 1=VNM, 3=Bitcoin, 9=USD dự phòng, 10=Vàng SJC, 13=Mượn anh A
+-- ═══════════════════════════════════════════════════════════════════════════
+INSERT INTO asset_deltas (asset_id, type, changes, recorded_at, source, note) VALUES
+  -- VNM: tạo mới (snapshot) → giá tăng (market) → mua thêm + giá tăng (thủ công)
+  (1, 'create',
+   '[{"field":"name","old":null,"new":"VNM"},{"field":"qty","old":null,"new":800},{"field":"cost_price","old":null,"new":89000},{"field":"current_price","old":null,"new":89000},{"field":"ticker","old":null,"new":"VNM"}]',
+   '2026-05-12T03:00:00.000Z', 'manual', NULL),
+  (1, 'edit',
+   '[{"field":"current_price","old":89000,"new":91000}]',
+   '2026-05-20T08:30:00.000Z', 'market:vps', NULL),
+  (1, 'edit',
+   '[{"field":"qty","old":800,"new":1000},{"field":"current_price","old":91000,"new":95000}]',
+   '2026-05-28T10:15:00.000Z', 'manual', 'Mua thêm'),
+
+  -- Bitcoin: tạo mới qua sync → giá tăng qua sync
+  (3, 'create',
+   '[{"field":"name","old":null,"new":"Bitcoin"},{"field":"qty","old":null,"new":0.5},{"field":"cost_price","old":null,"new":2000000000},{"field":"current_price","old":null,"new":2000000000},{"field":"ticker","old":null,"new":"bitcoin"}]',
+   '2026-05-14T01:00:00.000Z', 'sync:topi', NULL),
+  (3, 'edit',
+   '[{"field":"current_price","old":2000000000,"new":2500000000}]',
+   '2026-06-01T01:00:00.000Z', 'sync:topi', NULL),
+
+  -- Vàng SJC: cập nhật giá từ provider doji
+  (10, 'edit',
+   '[{"field":"current_price","old":88000000,"new":91000000}]',
+   '2026-06-05T02:00:00.000Z', 'market:doji', NULL),
+
+  -- USD dự phòng: cập nhật tỷ giá từ provider tygiausd
+  (9, 'edit',
+   '[{"field":"current_price","old":25000,"new":25500}]',
+   '2026-06-08T02:00:00.000Z', 'market:tygiausd', NULL),
+
+  -- Mượn anh A: xoá (delete kèm snapshot toàn bộ trường để khôi phục sau)
+  (13, 'delete',
+   '[{"field":"name","old":null,"new":"Mượn anh A"},{"field":"qty","old":null,"new":1},{"field":"unit","old":null,"new":"VND"},{"field":"cost_price","old":null,"new":20000000},{"field":"current_price","old":null,"new":20000000},{"field":"member_id","old":null,"new":1},{"field":"subtype","old":null,"new":"vay-nong"},{"field":"group_id","old":null,"new":"di-vay"}]',
+   '2026-06-10T09:00:00.000Z', 'manual', 'Đã thu hồi');

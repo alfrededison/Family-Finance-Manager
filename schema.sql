@@ -3,7 +3,7 @@
 PRAGMA foreign_keys = ON;
 
 DROP TABLE IF EXISTS asset_snapshots;
-DROP TABLE IF EXISTS price_history;
+DROP TABLE IF EXISTS asset_deltas;
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS platforms;
 DROP TABLE IF EXISTS members;
@@ -108,18 +108,17 @@ CREATE INDEX idx_assets_group   ON assets(group_id);
 CREATE INDEX idx_assets_member  ON assets(member_id);
 CREATE INDEX idx_assets_status  ON assets(status);
 
-CREATE TABLE price_history (
+CREATE TABLE asset_deltas (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   asset_id    INTEGER NOT NULL REFERENCES assets(id),
-  price       REAL    NOT NULL,
-  old_price   REAL,
+  type        TEXT    NOT NULL DEFAULT 'edit',   -- create | edit | delete
+  changes     TEXT,                              -- JSON: [{field, old, new}]
   recorded_at TEXT    NOT NULL DEFAULT (datetime('now')),
-  source      TEXT    NOT NULL DEFAULT 'manual',
-  type        TEXT    NOT NULL DEFAULT 'edit',
+  source      TEXT    NOT NULL DEFAULT 'manual', -- manual | sync:* | market:*
   note        TEXT
 );
 
-CREATE INDEX idx_price_asset ON price_history(asset_id, recorded_at);
+CREATE INDEX idx_deltas_asset ON asset_deltas(asset_id, recorded_at);
 
 CREATE TABLE settings (
   key   TEXT PRIMARY KEY,

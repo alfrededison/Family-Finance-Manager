@@ -1,6 +1,6 @@
 import { renderDashboard } from './pages/dashboard.js';
 import { renderAssets } from './pages/assets.js';
-import { renderPriceHistory } from './pages/price-history.js';
+import { renderAssetDeltas } from './pages/asset-deltas.js';
 import { renderSnapshots } from './pages/snapshots.js';
 import { renderSettings } from './pages/settings.js';
 import { renderLogin } from './pages/login.js';
@@ -8,7 +8,7 @@ import { renderLogin } from './pages/login.js';
 const routes = {
   dashboard: renderDashboard,
   assets: renderAssets,
-  'price-history': renderPriceHistory,
+  'asset-deltas': renderAssetDeltas,
   snapshots: renderSnapshots,
   settings: renderSettings,
 };

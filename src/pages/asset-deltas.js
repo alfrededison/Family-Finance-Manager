@@ -5,7 +5,7 @@ import { enrichAsset } from '../data/groups.js';
 const PAGE_SIZE = 50;
 const DROPDOWN_LIMIT = 50;
 
-export async function renderPriceHistory(view) {
+export async function renderAssetDeltas(view) {
   const rawAssets = await api.get('/assets');
   const assets = rawAssets.map(enrichAsset);
 
@@ -40,7 +40,7 @@ export async function renderPriceHistory(view) {
     if (type)  params.set('type', type);
 
     document.getElementById('ph-list').innerHTML = '<div class="loading">Đang tải...</div>';
-    const { rows, total } = await api.get('/price-history?' + params.toString());
+    const { rows, total } = await api.get('/asset-deltas?' + params.toString());
     document.getElementById('ph-list').innerHTML = renderTable(rows);
     renderPagination(total);
   };
@@ -157,11 +157,51 @@ function fmtDatetime(iso) {
   return new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-function fmtPrice(r) {
-  if (r.type === 'edit' && r.old_price != null) {
-    return `<span class="muted-sm">${fmtVND(r.old_price)}</span> → ${fmtVND(r.price)}`;
-  }
-  return fmtVND(r.price);
+const FIELD_LABELS = {
+  name: 'Tên',
+  qty: 'Số lượng',
+  unit: 'Đơn vị',
+  cost_price: 'Giá vốn',
+  current_price: 'Giá hiện tại',
+  member_id: 'Thành viên',
+  platform: 'Nền tảng',
+  bank: 'Ngân hàng',
+  term: 'Kỳ hạn',
+  maturity_date: 'Ngày đáo hạn',
+  interest_rate: 'Lãi suất',
+  interest_tax_rate: 'Thuế lãi',
+  interest_payment_day: 'Ngày trả lãi',
+  interest_payment_cycle: 'Chu kỳ trả lãi',
+  start_date: 'Ngày bắt đầu',
+  ticker: 'Mã',
+  subtype: 'Phân loại',
+  group_id: 'Nhóm',
+  notes: 'Ghi chú',
+};
+
+const MONEY_FIELDS = new Set(['cost_price', 'current_price']);
+
+function fmtVal(field, v) {
+  if (v == null || v === '') return '—';
+  if (MONEY_FIELDS.has(field)) return fmtVND(v);
+  return escapeHtml(String(v));
+}
+
+// Render the JSON `changes` array as "Nhãn: cũ → mới" lines.
+function fmtChanges(r) {
+  if (!r.changes) return '<span class="muted-sm">—</span>';
+  let list;
+  try { list = JSON.parse(r.changes); } catch { return '<span class="muted-sm">—</span>'; }
+  if (!Array.isArray(list) || !list.length) return '<span class="muted-sm">—</span>';
+
+  return list.map((c) => {
+    const label = FIELD_LABELS[c.field] || c.field;
+    // create + delete store a full snapshot ({old:null, new:value}) → show the value only.
+    if (r.type === 'create' || r.type === 'delete') {
+      return `<div><strong>${escapeHtml(label)}</strong>: ${fmtVal(c.field, c.new)}</div>`;
+    }
+    return `<div><strong>${escapeHtml(label)}</strong>: <span class="muted-sm">${fmtVal(c.field, c.old)}</span> → ${fmtVal(c.field, c.new)}</div>`;
+  }).join('');
 }
 
 function renderTable(rows) {
@@ -171,7 +211,7 @@ function renderTable(rows) {
       <thead>
         <tr>
           <th>Tài sản</th>
-          <th class="num">Giá</th>
+          <th>Thay đổi</th>
           <th>Loại</th>
           <th>Nguồn</th>
           <th>Ghi chú</th>
@@ -182,7 +222,7 @@ function renderTable(rows) {
         ${rows.map((r) => `
           <tr>
             <td>${escapeHtml(r.asset_name)}</td>
-            <td class="num">${fmtPrice(r)}</td>
+            <td>${fmtChanges(r)}</td>
             <td>${fmtType(r.type)}</td>
             <td>${fmtSource(r.source)}</td>
             <td class="muted-sm">${escapeHtml(r.note || '')}</td>

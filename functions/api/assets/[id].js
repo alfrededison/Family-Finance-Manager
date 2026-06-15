@@ -1,4 +1,4 @@
-import { json, error, readBody, nowISO } from '../../_utils.js';
+import { json, error, readBody, nowISO, diffAssetFields, snapshotAssetFields, recordAssetDelta } from '../../_utils.js';
 
 const UPDATABLE_FIELDS = [
   'name', 'group_id', 'subtype', 'member_id', 'qty', 'unit',
@@ -19,10 +19,13 @@ export async function onRequestPut({ env, request, params, data }) {
 
     const sets = [];
     const vals = [];
+    const after = {};
     for (const f of UPDATABLE_FIELDS) {
       if (b[f] !== undefined) {
+        const v = b[f] === '' ? null : b[f];
         sets.push(`${f} = ?`);
-        vals.push(b[f] === '' ? null : b[f]);
+        vals.push(v);
+        after[f] = v;
       }
     }
     if (!sets.length) return error('no fields to update', 400);
@@ -32,27 +35,25 @@ export async function onRequestPut({ env, request, params, data }) {
     vals.push(id);
     vals.push(data.user.id);
 
-    // Read old price before update so we can store it in history.
-    let oldPrice = null;
-    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
-      const prev = await env.DB.prepare(
-        'SELECT current_price FROM assets WHERE id = ? AND user_id = ?',
-      ).bind(id, data.user.id).first();
-      if (!prev) return error('not found', 404);
-      oldPrice = prev.current_price ?? null;
-    }
+    // Read the full row before update so we can diff every changed field.
+    const before = await env.DB.prepare(
+      'SELECT * FROM assets WHERE id = ? AND user_id = ?',
+    ).bind(id, data.user.id).first();
+    if (!before) return error('not found', 404);
 
     const updateRes = await env.DB.prepare(
       `UPDATE assets SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
     ).bind(...vals).run();
     if ((updateRes.meta?.changes ?? 0) === 0) return error('not found', 404);
 
-    // Track history when current_price changes.
-    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== '') {
-      await env.DB.prepare(
-        'INSERT INTO price_history (asset_id, price, old_price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(id, Number(b.current_price), oldPrice, nowISO(), b._source || 'manual', 'edit', b.notes || null).run();
-    }
+    // Record an edit delta for the fields that actually changed (skips no-ops).
+    await recordAssetDelta(env, {
+      assetId: id,
+      type: 'edit',
+      changes: diffAssetFields(before, after),
+      source: b._source || 'manual',
+      note: b.notes || null,
+    });
 
     const row = await env.DB.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
       .bind(id, data.user.id).first();
@@ -69,14 +70,19 @@ export async function onRequestDelete({ env, params, request, data }) {
     if (!id) return error('invalid id', 400);
 
     const b = await readBody(request);
+    // Snapshot the full asset before delete so it can be restored later.
     const asset = await env.DB.prepare(
-      'SELECT current_price FROM assets WHERE id = ? AND user_id = ?',
+      'SELECT * FROM assets WHERE id = ? AND user_id = ?',
     ).bind(id, data.user.id).first();
     if (!asset) return error('not found', 404);
 
-    await env.DB.prepare(
-      'INSERT INTO price_history (asset_id, price, recorded_at, source, type, note) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(id, asset.current_price, nowISO(), 'manual', 'delete', b?.notes || 'Đã xoá').run();
+    await recordAssetDelta(env, {
+      assetId: id,
+      type: 'delete',
+      changes: snapshotAssetFields(asset),
+      source: 'manual',
+      note: b?.notes || 'Đã xoá',
+    });
 
     await env.DB.prepare(
       "UPDATE assets SET status = 'deleted', updated_at = ? WHERE id = ? AND user_id = ?",

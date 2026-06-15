@@ -19,6 +19,56 @@ export function nowISO() {
   return new Date().toISOString();
 }
 
+// ─── Asset deltas ─────────────────────────────────────────────────────────────
+// Fields whose changes are recorded in asset_deltas.
+export const DELTA_FIELDS = [
+  'name', 'qty', 'unit', 'cost_price', 'current_price',
+  'member_id', 'platform', 'bank', 'term', 'maturity_date',
+  'interest_rate', 'interest_tax_rate',
+  'interest_payment_day', 'interest_payment_cycle',
+  'start_date', 'ticker', 'subtype', 'group_id', 'notes',
+];
+
+// Normalize for comparison: null/undefined/'' → null; numeric → Number; else String.
+function normVal(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return Number(v);
+  return String(v);
+}
+
+// Return [{field, old, new}] for fields that actually changed.
+// Only considers fields present in `after` (i.e. part of this update).
+export function diffAssetFields(before, after, fields = DELTA_FIELDS) {
+  const changes = [];
+  for (const f of fields) {
+    if (!(f in after)) continue;
+    if (normVal(before?.[f]) !== normVal(after[f])) {
+      changes.push({ field: f, old: before?.[f] ?? null, new: after[f] ?? null });
+    }
+  }
+  return changes;
+}
+
+// Snapshot for 'create': fields with a value → {field, old:null, new:value}.
+export function snapshotAssetFields(asset, fields = DELTA_FIELDS) {
+  const changes = [];
+  for (const f of fields) {
+    if (normVal(asset[f]) != null) {
+      changes.push({ field: f, old: null, new: asset[f] });
+    }
+  }
+  return changes;
+}
+
+// Insert one delta row. Skips 'edit' rows with no changes (no-op updates).
+export async function recordAssetDelta(env, { assetId, type, changes, source = 'manual', note = null, now = nowISO() }) {
+  if (type === 'edit' && (!changes || changes.length === 0)) return;
+  await env.DB.prepare(
+    'INSERT INTO asset_deltas (asset_id, type, changes, recorded_at, source, note) VALUES (?, ?, ?, ?, ?, ?)',
+  ).bind(assetId, type, changes ? JSON.stringify(changes) : null, now, source, note).run();
+}
+
 // Interest = principal × (rate/100) × years × (1 − tax).
 // Years chosen by cycle rules:
 //   - has maturity + end_of_term: full period (start → maturity)
