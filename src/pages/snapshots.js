@@ -323,7 +323,12 @@ function renderChart(dates, byDateKey, liabByDate, series, W) {
   // A single snapshot has no horizontal extent, so draw a full-width flat band
   // instead of a degenerate vertical line at the centre.
   const single = dates.length === 1;
-  const xAt = (i) => PAD_L + (single ? innerW / 2 : (i / (dates.length - 1)) * innerW);
+  // Position points by their real time distance, not evenly by index, so a
+  // 3-month gap reads wider than a 1-day gap on the axis.
+  const times = dates.map(isoToTime);
+  const tMin = times[0], tSpan = times[times.length - 1] - tMin;
+  const xAt = (i) => PAD_L + (single ? innerW / 2
+    : (tSpan > 0 ? (times[i] - tMin) / tSpan : i / (dates.length - 1)) * innerW);
   const yAt = (v) => PAD_T + innerH - v * yScale;
 
   // Asset area paths
@@ -359,19 +364,30 @@ function renderChart(dates, byDateKey, liabByDate, series, W) {
   }).join('');
   const baseLine = `<line x1="${PAD_L}" y1="${yAt(0).toFixed(2)}" x2="${W - PAD_R}" y2="${yAt(0).toFixed(2)}" stroke="var(--muted)" />`;
 
-  // X labels
+  // X labels — points are spaced by real time now, so pick by index but skip
+  // any label that would sit too close (in pixels) to the previous one drawn.
+  const MIN_LABEL_GAP = 40;
   const labelEvery = Math.max(1, Math.ceil(dates.length / 8));
+  let lastLabelX = -Infinity;
   const xLabels = dates.map((d, i) => {
-    if (i % labelEvery !== 0 && i !== dates.length - 1) return '';
-    return `<text x="${xAt(i).toFixed(2)}" y="${(H - PAD_B + 16).toFixed(2)}" class="snap-axis-x" text-anchor="middle">${shortDate(d, _state.period)}</text>`;
+    const isCandidate = i % labelEvery === 0 || i === dates.length - 1;
+    if (!isCandidate) return '';
+    const x = xAt(i);
+    const isLast = i === dates.length - 1;
+    // Always keep the final label; drop earlier candidates that crowd it.
+    if (!isLast && x - lastLabelX < MIN_LABEL_GAP) return '';
+    lastLabelX = x;
+    return `<text x="${x.toFixed(2)}" y="${(H - PAD_B + 16).toFixed(2)}" class="snap-axis-x" text-anchor="middle">${shortDate(d, _state.period)}</text>`;
   }).join('');
 
   // Per-date hover tooltip — invisible column rectangle reveals a tooltip on hover.
   const TT_W = 280, TT_LH = 17, TT_PAD = 10;
   const tooltips = points.map((p, i) => {
     const x = xAt(i);
-    const colW = innerW / Math.max(dates.length, 1);
-    const colX = x - colW / 2;
+    // Hover column spans the midpoints to its neighbours so uneven spacing
+    // leaves no gaps or overlaps between adjacent columns.
+    const colX = i === 0 ? PAD_L : (xAt(i - 1) + x) / 2;
+    const colW = (i === dates.length - 1 ? W - PAD_R : (x + xAt(i + 1)) / 2) - colX;
     const net = p.posSum - p.liab;
 
     const areaLines = series.map((s) => {
@@ -456,6 +472,12 @@ function fmtAxis(v) {
   if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M';
   if (v >= 1e3) return (v / 1e3).toFixed(0) + 'k';
   return String(v);
+}
+
+// Parse 'YYYY-MM' (monthly) or 'YYYY-MM-DD' (daily) into a sortable timestamp.
+function isoToTime(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return Date.UTC(y, (m || 1) - 1, d || 1);
 }
 
 function shortDate(iso, period) {
