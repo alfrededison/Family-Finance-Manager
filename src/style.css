@@ -402,6 +402,9 @@ th {
 }
 tr:hover { background: var(--surface-2); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+#ph-list .table-wrap { width: auto; }
+
 .pos { color: var(--success); }
 .neg { color: var(--danger); }
 .badge {
