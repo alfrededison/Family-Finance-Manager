@@ -248,6 +248,8 @@ main {
 }
 .value.pos { color: var(--success); }
 .value.neg { color: var(--danger); }
+.kpi-card .sub.pos { color: var(--success); }
+.kpi-card .sub.neg { color: var(--danger); }
 
 /* Sections */
 .section {

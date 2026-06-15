@@ -19,13 +19,30 @@ const RANGES = {
 // the others. Wiped on full reload.
 let _state = { range: 'all', period: 'weekly', summary: 'group' };
 let _data = null;
+let _live = { totalAsset: 0, totalLiability: 0, netWorth: 0 };
 let _viewEl = null;
 
 export async function renderSnapshots(view) {
   _viewEl = view;
-  _data = await api.get('/snapshots?from=1970-01-01');
+  const [snaps, dash] = await Promise.all([
+    api.get('/snapshots?from=1970-01-01'),
+    api.get('/dashboard'),
+  ]);
+  _data = snaps;
+  _live = computeLive(dash.assets);
   paint();
   bindResize();
+}
+
+// Live net worth from current active assets (mirrors dashboard aggregate).
+function computeLive(assets) {
+  let totalAsset = 0, totalLiability = 0;
+  for (const a of assets || []) {
+    const isLiability = findGroup(a.group_id)?.type === 'Liability';
+    if (isLiability) totalLiability += a.value || 0;
+    else totalAsset += a.value || 0;
+  }
+  return { totalAsset, totalLiability, netWorth: totalAsset - totalLiability };
 }
 
 let _resizeBound = false;
@@ -89,41 +106,52 @@ function renderShell(dates, byDateKey, liabByDate, series, chartW) {
     </div>
   `;
 
+  // KPI cards reflect the CURRENT live position; the snapshots only drive the
+  // comparison sub-lines (vs latest snapshot, vs start of selected range).
+  const liveNet  = _live.netWorth;
+  const liveLiab = _live.totalLiability;
+
+  let compareSubs = '';
+  if (dates.length) {
+    const last  = byDateKey.get(dates[dates.length - 1]) || new Map();
+    const first = byDateKey.get(dates[0]) || new Map();
+    const sumAreas = (m) => series.reduce((s, ser) => s + (m.get(ser.key) || 0), 0);
+    const lastNet  = sumAreas(last)  - (liabByDate.get(dates[dates.length - 1]) || 0);
+    const firstNet = sumAreas(first) - (liabByDate.get(dates[0]) || 0);
+    const vsLast  = liveNet - lastNet;
+    const vsFirst = liveNet - firstNet;
+    const pct = (d, base) => (base > 0 ? (d / base) * 100 : 0);
+    const sub = (d, base, label) =>
+      `<div class="sub ${d >= 0 ? 'pos' : 'neg'}">${d >= 0 ? '+' : ''}${fmtVND(d)} (${pct(d, base).toFixed(1)}%) ${label}</div>`;
+    compareSubs =
+      sub(vsLast,  lastNet,  `từ snapshot ${escapeHtml(dates[dates.length - 1])}`) +
+      sub(vsFirst, firstNet, `từ đầu kỳ ${escapeHtml(dates[0])}`);
+  }
+
+  const kpi = `
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="label">Tài sản ròng (hiện tại)</div>
+        <div class="value ${liveNet >= 0 ? 'pos' : 'neg'}">${fmtVND(liveNet)}</div>
+        ${compareSubs}
+      </div>
+      <div class="kpi-card">
+        <div class="label">Nợ phải trả (hiện tại)</div>
+        <div class="value">${fmtVND(liveLiab)}</div>
+      </div>
+    </div>`;
+
   if (dates.length === 0) {
     return `${header}
+      ${kpi}
       <div class="section">
         ${renderControls()}
         <div class="empty">Không có dữ liệu trong khoảng đã chọn.</div>
       </div>`;
   }
 
-  const last  = byDateKey.get(dates[dates.length - 1]) || new Map();
-  const first = byDateKey.get(dates[0]) || new Map();
-  const sumAreas = (m) => series.reduce((s, ser) => s + (m.get(ser.key) || 0), 0);
-  const lastAssets = sumAreas(last);
-  const lastLiab   = liabByDate.get(dates[dates.length - 1]) || 0;
-  const firstNet   = sumAreas(first) - (liabByDate.get(dates[0]) || 0);
-  const lastNet    = lastAssets - lastLiab;
-  const netDelta   = lastNet - firstNet;
-  const netPct     = firstNet > 0 ? (netDelta / firstNet) * 100 : 0;
-
   return `${header}
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="label">Tổng tài sản (mới nhất)</div>
-        <div class="value">${fmtVND(lastAssets)}</div>
-        <div class="sub">${escapeHtml(dates[dates.length - 1])}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Nợ phải trả</div>
-        <div class="value">${fmtVND(lastLiab)}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="label">Tài sản ròng</div>
-        <div class="value ${lastNet >= 0 ? 'pos' : 'neg'}">${fmtVND(lastNet)}</div>
-        <div class="sub ${netDelta >= 0 ? 'pos' : 'neg'}">${netDelta >= 0 ? '+' : ''}${fmtVND(netDelta)} (${netPct.toFixed(1)}%) từ ${escapeHtml(dates[0])}</div>
-      </div>
-    </div>
+    ${kpi}
     <div class="section">
       ${renderControls()}
       ${renderChart(dates, byDateKey, liabByDate, series, chartW)}
