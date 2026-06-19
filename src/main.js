@@ -29,7 +29,7 @@ async function router() {
     return;
   }
   const route = currentRoute();
-  document.querySelectorAll('.sidebar a, .bottom-nav-item, #header-settings').forEach((a) => {
+  document.querySelectorAll('.sidebar a, .bottom-nav-item').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === route);
   });
   closeNav();
@@ -47,23 +47,26 @@ window.addEventListener('hashchange', router);
 const sidebar = document.getElementById('sidebar');
 const navToggle = document.getElementById('nav-toggle');
 const navBackdrop = document.getElementById('nav-backdrop');
+const headerMenu = document.getElementById('header-menu');
+const navButtons = [navToggle, headerMenu].filter(Boolean);
 function openNav() {
   sidebar.classList.add('open');
   navBackdrop.hidden = false;
   requestAnimationFrame(() => navBackdrop.classList.add('show'));
-  navToggle.setAttribute('aria-expanded', 'true');
+  navButtons.forEach((b) => b.setAttribute('aria-expanded', 'true'));
   document.body.classList.add('nav-open');
 }
 function closeNav() {
   sidebar.classList.remove('open');
   navBackdrop.classList.remove('show');
   setTimeout(() => { navBackdrop.hidden = true; }, 200);
-  navToggle.setAttribute('aria-expanded', 'false');
+  navButtons.forEach((b) => b.setAttribute('aria-expanded', 'false'));
   document.body.classList.remove('nav-open');
 }
-navToggle.addEventListener('click', () => {
+function toggleNav() {
   if (sidebar.classList.contains('open')) closeNav(); else openNav();
-});
+}
+navButtons.forEach((b) => b.addEventListener('click', toggleNav));
 navBackdrop.addEventListener('click', closeNav);
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeNav(); });
 

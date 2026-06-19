@@ -74,7 +74,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.5);
-  z-index: 40;
+  z-index: 65;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -702,14 +702,30 @@ input:focus, select:focus, textarea:focus {
   }
 
   .nav-toggle { display: none; }
-  .sidebar { display: none; }
+
+  /* Sidebar becomes a slide-in overlay (desktop-style nav) */
+  .sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    max-width: 82vw;
+    height: 100vh;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.25);
+  }
+  .sidebar.open { transform: translateX(0); }
 
   /* Mobile header — sticky brand bar at top */
   .mobile-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    justify-content: flex-start;
+    gap: 10px;
     position: sticky;
     top: 0;
     z-index: 40;
@@ -746,6 +762,23 @@ input:focus, select:focus, textarea:focus {
     background: var(--primary);
     border-color: var(--primary);
   }
+
+  /* Hamburger menu button */
+  .mobile-header .menu-btn {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mobile-header .menu-btn span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: #fff;
+    border-radius: 2px;
+    transition: transform 0.2s, opacity 0.2s;
+  }
+  .mobile-header .menu-btn[aria-expanded="true"] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .mobile-header .menu-btn[aria-expanded="true"] span:nth-child(2) { opacity: 0; }
+  .mobile-header .menu-btn[aria-expanded="true"] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
   main {
     padding: 16px 16px calc(72px + var(--safe-bottom));
