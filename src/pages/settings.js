@@ -339,7 +339,12 @@ async function reloadMarketSettings() {
     btn.textContent = '↻ Đang lấy giá...';
     try {
       const res = await api.post('/market-data/fetch', {});
-      toast(`Đã cập nhật giá — ${res.assetsUpdated ?? 0} tài sản`);
+      const errs = (res.results || []).filter((r) => r.error);
+      let msg = `Đã cập nhật giá — ${res.assetsUpdated ?? 0} tài sản`;
+      if (errs.length) {
+        msg += ` · Lỗi: ${errs.map((e) => `${e.provider} (${e.error})`).join('; ')}`;
+      }
+      toast(msg);
       await reloadMarketSettings();
     } catch (err) {
       toast('Lỗi: ' + err.message);
