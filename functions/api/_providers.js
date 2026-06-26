@@ -81,24 +81,57 @@ async function fetchTechcombank() {
 // VPS public API — batch price feed for Vietnamese stocks.
 // lastPrice is quoted in thousands VND (e.g. 60.7 → 60,700 VND).
 // Falls back to reference price (r) when lastPrice is 0 (market closed).
+//
+// The feed has highly variable latency and gets slow/unresponsive on long
+// ticker lists — on Cloudflare a single big request can hang into a 522.
+// So we split tickers into small batches fetched in parallel, each with its
+// own timeout, and merge whatever succeeds (a failed batch is skipped, not
+// fatal).
+const VPS_BATCH_SIZE = 5;
+const VPS_TIMEOUT_MS = 15000;
+
+async function fetchVpsBatch(batch) {
+  const res = await fetch(
+    `https://bgapidatafeed.vps.com.vn/getliststockdata/${batch.join(',')}`,
+    {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(VPS_TIMEOUT_MS),
+    },
+  );
+  if (!res.ok) throw new Error(`HTTP ${res.status} from VPS`);
+  return res.json();
+}
+
 async function fetchVps(tickers) {
   if (tickers.length === 0) return { prices: {} };
 
-  const res = await fetch(
-    `https://bgapidatafeed.vps.com.vn/getliststockdata/${tickers.join(',')}`,
-    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } },
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status} from VPS`);
-  const data = await res.json();
+  const batches = [];
+  for (let i = 0; i < tickers.length; i += VPS_BATCH_SIZE) {
+    batches.push(tickers.slice(i, i + VPS_BATCH_SIZE));
+  }
+
+  const settled = await Promise.allSettled(batches.map(fetchVpsBatch));
 
   const prices = {};
-  for (const item of data) {
-    const ticker = (item.sym || '').toUpperCase();
-    if (!ticker) continue;
-    const raw = item.lastPrice || item.r || 0;
-    const price = Math.round(Number(raw) * 1000);
-    if (price > 0) prices[ticker] = price;
+  let ok = 0;
+  for (const [i, r] of settled.entries()) {
+    if (r.status !== 'fulfilled') {
+      console.log(`VPS batch ${batches[i].join(',')} failed:`, r.reason?.message || r.reason);
+      continue;
+    }
+    ok++;
+    for (const item of r.value) {
+      const ticker = (item.sym || '').toUpperCase();
+      if (!ticker) continue;
+      const raw = item.lastPrice || item.r || 0;
+      const price = Math.round(Number(raw) * 1000);
+      if (price > 0) prices[ticker] = price;
+    }
   }
+
+  // Every batch failed → surface an error rather than silently updating nothing.
+  if (ok === 0) throw new Error(`VPS: tất cả ${batches.length} lô đều thất bại`);
+
   return { prices };
 }
 

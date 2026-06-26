@@ -35,6 +35,30 @@ VALUES (1, 'VNM', 'dau-tu', 'co-phieu', 1, 1000, 'cp', 89000, 95000, 'VNM', 'act
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price, ticker, status, created_at, updated_at)
 VALUES (1, 'FPT', 'dau-tu', 'co-phieu', 2, 500, 'cp', 120000, 110000, 'FPT', 'active', datetime('now'), datetime('now'));
 
+-- co-phieu (bulk): 20 mã VN30 để test fetch VPS theo lô (>10 mã → nhiều batch)
+INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price, ticker, status, created_at, updated_at)
+VALUES
+  (1, 'VCB', 'dau-tu', 'co-phieu', 1, 200, 'cp', 88000,  92000,  'VCB', 'active', datetime('now'), datetime('now')),
+  (1, 'HPG', 'dau-tu', 'co-phieu', 2, 1000, 'cp', 26000, 28000,  'HPG', 'active', datetime('now'), datetime('now')),
+  (1, 'MWG', 'dau-tu', 'co-phieu', 1, 300, 'cp', 60000,  65000,  'MWG', 'active', datetime('now'), datetime('now')),
+  (1, 'SSI', 'dau-tu', 'co-phieu', 2, 500, 'cp', 30000,  32000,  'SSI', 'active', datetime('now'), datetime('now')),
+  (1, 'VND', 'dau-tu', 'co-phieu', 1, 800, 'cp', 18000,  17000,  'VND', 'active', datetime('now'), datetime('now')),
+  (1, 'VRE', 'dau-tu', 'co-phieu', 2, 600, 'cp', 25000,  27000,  'VRE', 'active', datetime('now'), datetime('now')),
+  (1, 'VHM', 'dau-tu', 'co-phieu', 1, 400, 'cp', 42000,  45000,  'VHM', 'active', datetime('now'), datetime('now')),
+  (1, 'VIC', 'dau-tu', 'co-phieu', 2, 300, 'cp', 45000,  43000,  'VIC', 'active', datetime('now'), datetime('now')),
+  (1, 'MSN', 'dau-tu', 'co-phieu', 1, 250, 'cp', 70000,  74000,  'MSN', 'active', datetime('now'), datetime('now')),
+  (1, 'GAS', 'dau-tu', 'co-phieu', 2, 200, 'cp', 68000,  66000,  'GAS', 'active', datetime('now'), datetime('now')),
+  (1, 'CTG', 'dau-tu', 'co-phieu', 1, 900, 'cp', 32000,  35000,  'CTG', 'active', datetime('now'), datetime('now')),
+  (1, 'BID', 'dau-tu', 'co-phieu', 2, 350, 'cp', 44000,  46000,  'BID', 'active', datetime('now'), datetime('now')),
+  (1, 'TCB', 'dau-tu', 'co-phieu', 1, 700, 'cp', 23000,  25000,  'TCB', 'active', datetime('now'), datetime('now')),
+  (1, 'ACB', 'dau-tu', 'co-phieu', 2, 1000, 'cp', 24000, 23000,  'ACB', 'active', datetime('now'), datetime('now')),
+  (1, 'MBB', 'dau-tu', 'co-phieu', 1, 1200, 'cp', 22000, 24000,  'MBB', 'active', datetime('now'), datetime('now')),
+  (1, 'STB', 'dau-tu', 'co-phieu', 2, 1500, 'cp', 30000, 33000,  'STB', 'active', datetime('now'), datetime('now')),
+  (1, 'VPB', 'dau-tu', 'co-phieu', 1, 1100, 'cp', 19000, 18500,  'VPB', 'active', datetime('now'), datetime('now')),
+  (1, 'SHB', 'dau-tu', 'co-phieu', 2, 2000, 'cp', 11000, 12000,  'SHB', 'active', datetime('now'), datetime('now')),
+  (1, 'HDB', 'dau-tu', 'co-phieu', 1, 800, 'cp', 25000,  26000,  'HDB', 'active', datetime('now'), datetime('now')),
+  (1, 'TPB', 'dau-tu', 'co-phieu', 2, 900, 'cp', 17000,  16500,  'TPB', 'active', datetime('now'), datetime('now'));
+
 -- coin: giá trị lớn; notes có __src prefix → hiển thị "source:COINGECKO · Đầu tư dài hạn"; member Chung
 INSERT INTO assets (user_id, name, group_id, subtype, member_id, qty, unit, cost_price, current_price, ticker, notes, status, created_at, updated_at)
 VALUES (1, 'Bitcoin', 'dau-tu', 'coin', 3, 0.5, 'BTC', 2000000000, 2500000000, 'bitcoin',
