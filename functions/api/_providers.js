@@ -31,21 +31,24 @@ async function extractCells(url, cssSelector, limit = Infinity) {
   return cells.slice(0, limit).map((s) => s.trim());
 }
 
-function parseVnd(str) {
-  return Number(String(str || '').replace(/[^\d]/g, ''));
+// Parse the first number in a string, treating . and , as thousands separators.
+function parsePrice(str) {
+  return Number(String(str ?? '').match(/[\d.,]+/)?.[0]?.replace(/[.,]/g, '') || 0);
 }
 
 // ── Provider fetch functions ────────────────────────────────────────────────
 
 async function fetchDoji() {
-  const cells = await extractCells(
-    'https://www.24h.com.vn/gia-vang-hom-nay-c425.html',
-    'tr[data-seach="doji_hn"] td',
-    3,
-  );
-  console.log('DOJI cells:', cells);
-  // cells[0] = label, cells[1] = price, cells[2] = buy-back price
-  const price = Number((cells[1] || '').match(/[\d.,]+/)?.[0]?.replace(/[.,]/g, '') || 0) * 100;
+  // Official DOJI feed (SJC 1L price is uniform nationwide).
+  const res = await fetch('https://update.giavang.doji.vn/banggia/doji_92409/getmt', {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from DOJI`);
+  const xml = await res.text();
+  // <Row Name='SJC -Bán Lẻ' Key='doji_0' Sell='14,600' Buy='14,300' /> — Buy is the "mua vào" price.
+  console.log('DOJI XML:', xml);
+  const row = xml.match(/Key='doji_0'[^>]*/)?.[0] || '';
+  const price = parsePrice(row.match(/Buy='([\d.,]+)'/)?.[1]) * 1000;
   if (!price) throw new Error('DOJI: không lấy được giá');
   return { price };
 }
@@ -53,21 +56,24 @@ async function fetchDoji() {
 async function fetchTyGiaUsd() {
   const cells = await extractCells('https://tygiausd.org/', 'table tr td.text-right', 1);
   console.log('TyGiaUSD cells:', cells);
-  // td includes a child span (change indicator) — extract only the first number sequence
-  const price = Number((cells[0] || '').match(/[\d.,]+/)?.[0]?.replace(/[.,]/g, '') || 0);
+  // td includes a child span (change indicator) — parsePrice takes only the first number sequence
+  const price = parsePrice(cells[0]);
   if (!price) throw new Error('TyGiaUSD: không lấy được tỷ giá');
   return { price };
 }
 
 async function fetchTechcombank() {
-  const cells = await extractCells(
-    'https://techcombank.com/khach-hang-ca-nhan',
-    'div.table-records__inner-top-body a p.body__item-currency-value',
-    3,
+  // Official JSON feed behind techcombank.com/cong-cu-tien-ich/ty-gia
+  const res = await fetch(
+    'https://techcombank.com/content/techcombank/web/vn/vi/cong-cu-tien-ich/ty-gia/_jcr_content.exchange-rates.integration.json',
+    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } },
   );
-  console.log('Techcombank cells:', cells);
-  // cells[0] = buy cash, cells[1] = transfer, cells[2] = sell
-  const price = parseVnd(cells[1]);
+  if (!res.ok) throw new Error(`HTTP ${res.status} from Techcombank`);
+  const data = await res.json();
+  // bidRateTM = mua tiền mặt, bidRateCK = mua chuyển khoản, askRate = bán
+  console.log('Techcombank exchange rates:', data?.exchangeRate?.data);
+  const usd = (data?.exchangeRate?.data || []).find((r) => r.label === 'USD (50,100)');
+  const price = Number(usd?.bidRateCK);
   if (!price) throw new Error('Techcombank: không lấy được tỷ giá');
   return { price };
 }
