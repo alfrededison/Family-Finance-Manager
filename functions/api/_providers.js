@@ -16,9 +16,14 @@ function priceDeltaStmt(env, assetId, oldPrice, newPrice, now, source) {
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
+// Upstream feeds can be slow/unresponsive; cap every request so a hung
+// connection fails cleanly instead of stalling the function into a 522.
+const FETCH_TIMEOUT_MS = 15000;
+
 async function extractCells(url, cssSelector, limit = Infinity) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
   const cells = [];
@@ -42,6 +47,7 @@ async function fetchDoji() {
   // Official DOJI feed (SJC 1L price is uniform nationwide).
   const res = await fetch('https://update.giavang.doji.vn/banggia/doji_92409/getmt', {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} from DOJI`);
   const xml = await res.text();
@@ -66,7 +72,10 @@ async function fetchTechcombank() {
   // Official JSON feed behind techcombank.com/cong-cu-tien-ich/ty-gia
   const res = await fetch(
     'https://techcombank.com/content/techcombank/web/vn/vi/cong-cu-tien-ich/ty-gia/_jcr_content.exchange-rates.integration.json',
-    { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } },
+    {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    },
   );
   if (!res.ok) throw new Error(`HTTP ${res.status} from Techcombank`);
   const data = await res.json();
