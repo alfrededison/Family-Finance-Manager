@@ -465,6 +465,13 @@ button.secondary {
 }
 button.danger { background: var(--danger); }
 button.small { padding: 4px 10px; font-size: 12px; min-height: 28px; }
+button.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+}
+.group-header-totals button.icon-btn { min-height: 26px; }
 
 /* Forms */
 .toolbar {
@@ -1219,7 +1226,7 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
 .asset-list-header,
 .asset-row {
   display: grid;
-  grid-template-columns: 1fr 150px 130px 100px 110px 76px;
+  grid-template-columns: 1fr 150px 130px 100px 110px 128px;
   grid-template-areas: "name meta value pnl liquid actions";
   gap: 0 8px;
   align-items: center;
@@ -1250,7 +1257,7 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
 .ar-qty-line { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ar-value   { grid-area: value; text-align: right; font-variant-numeric: tabular-nums; }
 .ar-pnl     { grid-area: pnl; text-align: right; font-variant-numeric: tabular-nums; }
-.ar-liquid  { grid-area: liquid; }
+.ar-liquid  { grid-area: liquid; text-align: right; }
 .ar-actions { grid-area: actions; display: flex; gap: 4px; justify-content: flex-end; white-space: nowrap; }
 
 /* Mobile (≤640px) */
@@ -1269,6 +1276,7 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
   }
   .ar-value { align-self: start; }
   .ar-pnl { text-align: right; align-self: start; }
+  .ar-liquid { text-align: left; }
   .ar-actions { align-self: end; }
 }
 

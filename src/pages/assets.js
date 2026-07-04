@@ -3,7 +3,8 @@ import { fmtVND, fmtPct, escapeHtml, openModal, closeModal, toast, rerender, bin
 import { bankSelectHTML, bindBankSelect } from '../components/bank-select.js';
 import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
-import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid } from '../data/groups.js';
+import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid, nextInterestPaymentDate } from '../data/groups.js';
+import { shareAsset, shareGroup, SHARE_ICON } from '../share.js';
 
 const MONEY_FIELDS = ['cost_price', 'current_price'];
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
@@ -262,12 +263,13 @@ function renderGroupedView(assets) {
       const pnlClass     = subtotalPnl >= 0 ? 'pos' : 'neg';
       const pnlSign      = subtotalPnl >= 0 ? '+' : '';
       return `
-        <div class="asset-group-section">
+        <div class="asset-group-section" data-group-id="${escapeHtml(g.id)}">
           <div class="asset-group-header">
             <span class="group-header-title"><span class="group-chevron">▾</span> ${escapeHtml(g.icon)} ${escapeHtml(g.name)} <span class="muted-sm">(${items.length})</span></span>
             <span class="group-header-totals">
               <span class="group-total-value">${fmtVND(subtotal)}</span>
               <span class="group-total-pnl ${pnlClass}">${pnlSign}${fmtVND(subtotalPnl)}</span>
+              <button class="small secondary icon-btn" data-act="share-group" title="Chia sẻ ảnh" aria-label="Chia sẻ nhóm">${SHARE_ICON}</button>
             </span>
           </div>
           <div class="asset-list">
@@ -362,6 +364,7 @@ function renderAssetRow(a, showGroup) {
         : '<span class="badge warn">Chưa khả dụng</span>'
       }</div>
       <div class="ar-actions">
+        <button class="small secondary icon-btn" data-act="share" title="Chia sẻ ảnh" aria-label="Chia sẻ ảnh">${SHARE_ICON}</button>
         <button class="small secondary" data-act="edit">Sửa</button>
         <button class="small danger" data-act="del">Xoá</button>
       </div>
@@ -423,47 +426,25 @@ function interestPaymentChip(a, nextPay) {
   return `<span class="badge warn">Sắp ${action}: ${diffDays} ngày</span>`;
 }
 
-function nextInterestPaymentDate(a) {
-  const cycle = a.interest_payment_cycle;
-  if (cycle !== 'monthly' && cycle !== 'quarterly') return null;
-  const day = Number(a.interest_payment_day);
-  if (!day || day < 1 || day > 31) return null;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const step = cycle === 'monthly' ? 1 : 3;
-
-  // Quarterly aligns to start_date's month (mod 3); monthly accepts any month.
-  let anchorMod = 0;
-  if (cycle === 'quarterly' && a.start_date) {
-    const s = new Date(a.start_date);
-    if (!isNaN(s.getTime())) anchorMod = s.getMonth() % 3;
-  }
-  const mat = a.maturity_date ? new Date(a.maturity_date) : null;
-  const matValid = mat && !isNaN(mat.getTime());
-
-  for (let i = 0; i < 24; i++) {
-    const probe = new Date(today.getFullYear(), today.getMonth() + i, 1);
-    if (probe.getMonth() % step !== anchorMod) continue;
-    const lastDay = new Date(probe.getFullYear(), probe.getMonth() + 1, 0).getDate();
-    const d = new Date(probe.getFullYear(), probe.getMonth(), Math.min(day, lastDay));
-    if (d < today) continue;
-    if (matValid && d > mat) return null;
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const da = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${mo}-${da}`;
-  }
-  return null;
-}
-
 function bindRowActions(assets, members, reload) {
   document.querySelectorAll('#asset-list .asset-group-header').forEach((header) => {
     header.onclick = () => header.closest('.asset-group-section').classList.toggle('collapsed');
+    const shareBtn = header.querySelector('[data-act="share-group"]');
+    if (shareBtn) {
+      shareBtn.onclick = (e) => {
+        e.stopPropagation();
+        const gid = header.closest('.asset-group-section').dataset.groupId;
+        const group = findGroup(gid);
+        const items = assets.filter((a) => a.group_id === gid);
+        if (group) shareGroup(group, items);
+      };
+    }
   });
 
   document.querySelectorAll('#asset-list .asset-row[data-id]').forEach((row) => {
     const id = Number(row.dataset.id);
     const asset = assets.find((a) => a.id === id);
+    row.querySelector('[data-act="share"]').onclick = () => shareAsset(asset);
     row.querySelector('[data-act="edit"]').onclick = () => openAssetModal(asset, members, reload);
     row.querySelector('[data-act="del"]').onclick = () => {
       openModal(`

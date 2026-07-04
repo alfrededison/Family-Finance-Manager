@@ -106,6 +106,42 @@ export function isLiquid(a) {
   return true;
 }
 
+// Next upcoming interest payment date (YYYY-MM-DD) for monthly/quarterly cycles,
+// or null. Pure over the asset's own fields — shared by the asset list and the
+// share-image card.
+export function nextInterestPaymentDate(a) {
+  const cycle = a.interest_payment_cycle;
+  if (cycle !== 'monthly' && cycle !== 'quarterly') return null;
+  const day = Number(a.interest_payment_day);
+  if (!day || day < 1 || day > 31) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const step = cycle === 'monthly' ? 1 : 3;
+
+  // Quarterly aligns to start_date's month (mod 3); monthly accepts any month.
+  let anchorMod = 0;
+  if (cycle === 'quarterly' && a.start_date) {
+    const s = new Date(a.start_date);
+    if (!isNaN(s.getTime())) anchorMod = s.getMonth() % 3;
+  }
+  const mat = a.maturity_date ? new Date(a.maturity_date) : null;
+  const matValid = mat && !isNaN(mat.getTime());
+
+  for (let i = 0; i < 24; i++) {
+    const probe = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    if (probe.getMonth() % step !== anchorMod) continue;
+    const lastDay = new Date(probe.getFullYear(), probe.getMonth() + 1, 0).getDate();
+    const d = new Date(probe.getFullYear(), probe.getMonth(), Math.min(day, lastDay));
+    if (d < today) continue;
+    if (matValid && d > mat) return null;
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mo}-${da}`;
+  }
+  return null;
+}
+
 // Adds group_name/icon/type and a resolved subtype_name onto an asset row.
 export function enrichAsset(a) {
   const g = BY_ID[a.group_id];
