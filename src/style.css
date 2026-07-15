@@ -530,6 +530,21 @@ input:focus, select:focus, textarea:focus {
   min-width: 0;
 }
 .form-grid label.full { grid-column: span 2; }
+.form-grid label[data-cycle-hidden] { display: none !important; }
+.form-grid label.check-label {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.form-grid label.check-label input[type="checkbox"] {
+  min-height: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--primary);
+}
 
 /* Toast */
 .toast {

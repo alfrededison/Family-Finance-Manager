@@ -712,6 +712,11 @@ function fragInterestPayment(a, { attr = '' } = {}) {
     <label ${attr}>Ngày trả lãi (1-31)
       <input name="interest_payment_day" type="number" min="1" max="31"
              value="${a.interest_payment_day ?? ''}" />
+    </label>
+    <label ${attr} data-include-maturity class="check-label full">
+      <input type="checkbox" name="interest_include_maturity" value="1"
+             ${a.interest_include_maturity ? 'checked' : ''} />
+      Lãi bao gồm ngày đáo hạn
     </label>`;
 }
 
@@ -795,6 +800,7 @@ function formBank(subtypes, members, asset) {
 // Form behaviour
 // ────────────────────────────────────────────────────────────────────────────
 function bindFormBehaviour(groupId, formBody) {
+  bindIncludeMaturityToggle(formBody);
   if (groupId === 'tien-gui') {
     bindTermTrio(formBody);
     return;
@@ -823,6 +829,20 @@ function bindFormBehaviour(groupId, formBody) {
     savingsEls.forEach((el) => { el.style.display = show ? '' : 'none'; });
   };
   subtypeEl.addEventListener('change', toggle);
+  toggle();
+}
+
+// "Lãi bao gồm ngày đáo hạn" only applies to end-of-term interest — hide it
+// for other cycles. Uses a data attribute (not style.display) so it composes
+// with the bank-savings show/hide, which writes inline display on the same label.
+function bindIncludeMaturityToggle(formBody) {
+  const cycleEl = formBody.querySelector('select[name="interest_payment_cycle"]');
+  const label = formBody.querySelector('[data-include-maturity]');
+  if (!cycleEl || !label) return;
+  const toggle = () => {
+    label.toggleAttribute('data-cycle-hidden', cycleEl.value !== 'end_of_term');
+  };
+  cycleEl.addEventListener('change', toggle);
   toggle();
 }
 
@@ -888,6 +908,11 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
     for (const [k, v] of fd.entries()) body[k] = v === '' ? null : v;
     parseMoneyPayload(body, MONEY_FIELDS);
 
+    // Unchecked checkboxes are absent from FormData — send explicit 0/1.
+    if (form.querySelector('[name="interest_include_maturity"]')) {
+      body.interest_include_maturity = fd.has('interest_include_maturity') ? 1 : 0;
+    }
+
     if (groupId === 'tien-gui') {
       body.current_price = body.cost_price;
     }
@@ -896,6 +921,7 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
       body.term = null;
       body.interest_payment_cycle = null;
       body.interest_payment_day = null;
+      body.interest_include_maturity = 0;
     }
 
     try {

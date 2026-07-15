@@ -50,9 +50,10 @@ export async function onRequestPost({ env, request, data }) {
         platform, term, maturity_date, bank,
         interest_rate, interest_tax_rate,
         interest_payment_day, interest_payment_cycle,
+        interest_include_maturity,
         start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
     `).bind(
       data.user.id,
       b.name,
@@ -71,6 +72,7 @@ export async function onRequestPost({ env, request, data }) {
       b.interest_tax_rate != null && b.interest_tax_rate !== '' ? Number(b.interest_tax_rate) : null,
       b.interest_payment_day != null && b.interest_payment_day !== '' ? Number(b.interest_payment_day) : null,
       b.interest_payment_cycle || null,
+      b.interest_include_maturity ? 1 : 0,
       b.start_date || null,
       b.notes || null,
       b.ticker || null,

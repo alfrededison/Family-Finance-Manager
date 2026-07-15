@@ -186,6 +186,7 @@ const FIELD_LABELS = {
   interest_tax_rate: 'Thuế lãi',
   interest_payment_day: 'Ngày trả lãi',
   interest_payment_cycle: 'Chu kỳ trả lãi',
+  interest_include_maturity: 'Lãi bao gồm ngày đáo hạn',
   start_date: 'Ngày bắt đầu',
   ticker: 'Mã',
   subtype: 'Phân loại',

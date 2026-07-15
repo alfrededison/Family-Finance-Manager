@@ -6,6 +6,7 @@ const UPDATABLE_FIELDS = [
   'platform', 'term', 'maturity_date', 'bank',
   'interest_rate', 'interest_tax_rate',
   'interest_payment_day', 'interest_payment_cycle',
+  'interest_include_maturity',
   'start_date', 'notes', 'ticker', 'status',
 ];
 

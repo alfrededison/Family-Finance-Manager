@@ -80,9 +80,10 @@ async function runMerge(env, userId, payload) {
         cost_price, current_price, platform, term, maturity_date, bank,
         interest_rate, interest_tax_rate,
         interest_payment_day, interest_payment_cycle,
+        interest_include_maturity,
         start_date, notes, ticker,
         status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       userId,
       r.name, r.group_id, r.subtype || null,
@@ -92,6 +93,7 @@ async function runMerge(env, userId, payload) {
       r.platform || null, r.term || null, r.maturity_date || null, r.bank || null,
       r.interest_rate ?? null, r.interest_tax_rate ?? null,
       r.interest_payment_day ?? null, r.interest_payment_cycle || null,
+      r.interest_include_maturity ? 1 : 0,
       r.start_date || null, r.notes || null, r.ticker || null,
       r.status || 'active', r.created_at || nowISO(), r.updated_at || nowISO(),
     ).run();

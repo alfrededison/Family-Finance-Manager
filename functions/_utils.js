@@ -26,6 +26,7 @@ export const DELTA_FIELDS = [
   'member_id', 'platform', 'bank', 'term', 'maturity_date',
   'interest_rate', 'interest_tax_rate',
   'interest_payment_day', 'interest_payment_cycle',
+  'interest_include_maturity',
   'start_date', 'ticker', 'subtype', 'group_id', 'notes',
 ];
 
@@ -85,7 +86,10 @@ function pickInterestYears(a) {
     const start = new Date(a.start_date);
     const mat = new Date(a.maturity_date);
     if (isNaN(start.getTime()) || isNaN(mat.getTime()) || mat <= start) return 0;
-    return (mat - start) / 86400000 / 365;
+    // Day count = maturity − start; +1 when the asset opts in to also
+    // counting the maturity day (some banks do).
+    const extraDay = a.interest_include_maturity ? 1 : 0;
+    return ((mat - start) / 86400000 + extraDay) / 365;
   }
 
   const cycleYears = cycle === 'quarterly' ? 0.25 : 1 / 12;

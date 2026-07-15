@@ -95,6 +95,8 @@ CREATE TABLE assets (
   interest_payment_cycle TEXT
                          CHECK (interest_payment_cycle IS NULL
                                 OR interest_payment_cycle IN ('end_of_term', 'monthly', 'quarterly')),
+  -- End-of-term interest: also count the maturity day (+1 day). Some banks do.
+  interest_include_maturity INTEGER NOT NULL DEFAULT 0,
   start_date     TEXT,
   notes          TEXT,
   ticker         TEXT,
