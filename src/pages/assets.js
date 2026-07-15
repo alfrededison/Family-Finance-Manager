@@ -825,16 +825,17 @@ function bindFormBehaviour(groupId, formBody) {
   if (!subtypeEl || !savingsEls.length) return;
 
   const toggle = () => {
-    const show = subtypeEl.value === BANK_SAVINGS_SUBTYPE;
-    savingsEls.forEach((el) => { el.style.display = show ? '' : 'none'; });
+    const hide = subtypeEl.value !== BANK_SAVINGS_SUBTYPE;
+    savingsEls.forEach((el) => { el.toggleAttribute('data-subtype-hidden', hide); });
   };
   subtypeEl.addEventListener('change', toggle);
   toggle();
 }
 
 // "Lãi bao gồm ngày đáo hạn" only applies to end-of-term interest — hide it
-// for other cycles. Uses a data attribute (not style.display) so it composes
-// with the bank-savings show/hide, which writes inline display on the same label.
+// for other cycles. Show/hide conditions each own a data attribute
+// (data-cycle-hidden, data-subtype-hidden); a label is hidden while any is
+// present, so independent toggles on the same label don't overwrite each other.
 function bindIncludeMaturityToggle(formBody) {
   const cycleEl = formBody.querySelector('select[name="interest_payment_cycle"]');
   const label = formBody.querySelector('[data-include-maturity]');
