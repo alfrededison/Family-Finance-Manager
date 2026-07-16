@@ -90,11 +90,13 @@ appscript/
 │   └── icon-{192,512,maskable}.png
 ├── scripts/
 │   ├── db.sh                     # migrate / migrate:remote / seed
+│   ├── gen-demo.js               # Sinh demo.sql từ demo.template.sql (điền ngày tương đối theo ngày chạy)
 │   ├── setup.sh                  # Initial setup
 │   ├── generate-vapid.sh         # Sinh VAPID keypair (ECDH P-256 → base64url) cho Web Push
 │   └── generate-icons.sh         # Build PWA icons from base_logo.png
 ├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, asset_deltas, settings, asset_snapshots)
-├── demo.sql                      # Seed / initial data — demo có 1 user (demo@example.com / demo1234)
+├── demo.template.sql             # Template seed — placeholder ngày tương đối ({{D+n}}, {{EOM-n}}, {{DOM+n}})
+├── demo.sql                      # GENERATED bởi scripts/gen-demo.js — demo có 1 user (demo@example.com / demo1234)
 ├── wrangler.toml                 # Pages config (DB binding, build output dir, ALLOW_SIGNUP nếu mở signup)
 ├── vite.config.js                # Dev proxy /api/ → :8788; injects git info + SW cache version
 └── package.json                  # v0.1.0
@@ -145,7 +147,7 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 - `dev` → concurrently chạy `vite` (frontend :5173) + `wrangler pages dev public --port=8788`
 - `build`, `deploy` → Vite build + Pages deploy
 - `worker:dev`, `worker:deploy` → cron worker (test bằng `--test-scheduled`)
-- `db:migrate[:remote]`, `db:seed` → wrapper `scripts/db.sh`
+- `db:migrate[:remote]` → wrapper `scripts/db.sh`; `db:seed` → gen-demo.js (sinh demo.sql với ngày tương đối) rồi `scripts/db.sh seed`
 - `icons`, `setup`
 
 ## Asset Snapshots
