@@ -88,6 +88,7 @@ export async function renderAssets(view) {
             <option value="next-pay-asc" ${initSort === 'next-pay-asc' ? 'selected' : ''}>Trả lãi gần nhất</option>
             <option value="value-desc"   ${initSort === 'value-desc'   ? 'selected' : ''}>Giá trị cao nhất</option>
             <option value="pnl-desc"     ${initSort === 'pnl-desc'     ? 'selected' : ''}>Lãi cao nhất</option>
+            <option value="name-asc"     ${initSort === 'name-asc'     ? 'selected' : ''}>Tên A→Z</option>
           </select>
         </div>
         <div class="segmented">
@@ -205,6 +206,7 @@ function sortAssets(assets, sortBy) {
   }
   if (sortBy === 'value-desc')   return copy.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   if (sortBy === 'pnl-desc')     return copy.sort((a, b) => (b.pnl ?? -Infinity) - (a.pnl ?? -Infinity));
+  if (sortBy === 'name-asc')     return copy.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'vi'));
   return copy;
 }
 
