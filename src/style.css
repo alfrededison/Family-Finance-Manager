@@ -1234,6 +1234,75 @@ button.secondary.active { border-color: var(--primary); color: var(--primary); }
 .group-total-pnl.pos { color: var(--success); }
 .group-total-pnl.neg { color: var(--danger); }
 
+/* ── Timeline view ───────────────────────────────────────────────────────── */
+.timeline {
+  position: relative;
+  padding-left: 18px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--border);
+}
+.tl-day { position: relative; margin-bottom: 18px; }
+.tl-day:last-child { margin-bottom: 0; }
+.tl-dot {
+  position: absolute;
+  left: -17px;
+  top: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 2px solid var(--muted);
+}
+.tl-day.today .tl-dot   { background: var(--success); border-color: var(--success); }
+.tl-day.overdue .tl-dot { background: var(--danger);  border-color: var(--danger); }
+.tl-day.upcoming .tl-dot { background: var(--warning); border-color: var(--warning); }
+.tl-date {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.tl-date-text { font-size: 13px; font-weight: 600; }
+.tl-date-rel  { font-size: 11px; color: var(--muted); }
+.tl-day.today .tl-date-rel   { color: var(--success); font-weight: 600; }
+.tl-day.overdue .tl-date-rel { color: var(--danger);  font-weight: 600; }
+.tl-day.upcoming .tl-date-rel { color: var(--warning); font-weight: 600; }
+.tl-events {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.tl-event {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+.tl-event:last-child { border-bottom: none; }
+.tl-event:hover { background: var(--surface-2); }
+.tl-event-icon { font-size: 16px; flex: 0 0 auto; }
+.tl-event-main { flex: 1; min-width: 0; }
+.tl-event-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.tl-event-value.pos { color: var(--success); }
+.tl-event-value.neg { color: var(--danger); }
+.tl-event-value .muted-sm { font-weight: 400; }
+
 /* ── Asset list grid (replaces <table>, no horizontal scroll on mobile) ─── */
 .asset-list {
   overflow: hidden;

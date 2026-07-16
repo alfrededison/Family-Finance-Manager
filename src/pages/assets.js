@@ -92,8 +92,9 @@ export async function renderAssets(view) {
           </select>
         </div>
         <div class="segmented">
-          <button id="f-view-grouped" class="small secondary ${initView === 'grouped' ? 'active' : ''}">Nhóm</button>
-          <button id="f-view-flat"    class="small secondary ${initView === 'flat'    ? 'active' : ''}">Danh sách</button>
+          <button id="f-view-grouped"  class="small secondary ${initView === 'grouped'  ? 'active' : ''}">Nhóm</button>
+          <button id="f-view-flat"     class="small secondary ${initView === 'flat'     ? 'active' : ''}">Danh sách</button>
+          <button id="f-view-timeline" class="small secondary ${initView === 'timeline' ? 'active' : ''}">Timeline</button>
         </div>
       </div>
 
@@ -106,8 +107,11 @@ export async function renderAssets(view) {
   let currentAssets = assets;
   let currentPage = 0;
 
-  const getViewMode = () =>
-    document.getElementById('f-view-grouped').classList.contains('active') ? 'grouped' : 'flat';
+  const getViewMode = () => {
+    if (document.getElementById('f-view-grouped').classList.contains('active'))  return 'grouped';
+    if (document.getElementById('f-view-timeline').classList.contains('active')) return 'timeline';
+    return 'flat';
+  };
   const getSort = () => document.getElementById('f-sort').value;
 
   const syncURL = () => {
@@ -129,13 +133,16 @@ export async function renderAssets(view) {
   };
 
   const redisplay = () => {
-    const sorted = sortAssets(currentAssets, getSort());
     const vw = getViewMode();
+    // Timeline is inherently chronological and builds from all filtered assets,
+    // ignoring the sort dropdown (date-based sorts would drop assets whose
+    // interest events should still appear).
+    const sorted = vw === 'timeline' ? currentAssets : sortAssets(currentAssets, getSort());
     document.getElementById('asset-list').innerHTML =
       renderSummaryBar(sorted) +
-      (vw === 'grouped'
-        ? renderGroupedView(sorted)
-        : renderFlatView(sorted, currentPage));
+      (vw === 'grouped'  ? renderGroupedView(sorted)
+       : vw === 'timeline' ? renderTimelineView(sorted)
+       : renderFlatView(sorted, currentPage));
     bindRowActions(currentAssets, members, reload);
     document.querySelectorAll('#asset-list [data-page]').forEach((btn) => {
       btn.onclick = () => { currentPage = Number(btn.dataset.page); redisplay(); };
@@ -181,12 +188,14 @@ export async function renderAssets(view) {
   const setView = (vw) => {
     document.getElementById('f-view-grouped').classList.toggle('active', vw === 'grouped');
     document.getElementById('f-view-flat').classList.toggle('active', vw === 'flat');
+    document.getElementById('f-view-timeline').classList.toggle('active', vw === 'timeline');
     currentPage = 0;
     syncURL();
     redisplay();
   };
-  document.getElementById('f-view-grouped').onclick = () => setView('grouped');
-  document.getElementById('f-view-flat').onclick    = () => setView('flat');
+  document.getElementById('f-view-grouped').onclick  = () => setView('grouped');
+  document.getElementById('f-view-flat').onclick     = () => setView('flat');
+  document.getElementById('f-view-timeline').onclick = () => setView('timeline');
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
@@ -296,6 +305,103 @@ function renderFlatView(assets, page) {
       ${pageItems.map((a) => renderAssetRow(a, true)).join('')}
     </div>
     ${assets.length > PAGE_SIZE ? renderPagination(assets.length, page) : ''}
+  `;
+}
+
+// ── Timeline view ─────────────────────────────────────────────────────────────
+
+const WEEKDAYS_VI = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+
+const TIMELINE_KINDS = {
+  maturity: { icon: '⏰', label: 'Đáo hạn' },
+  receive:  { icon: '💰', label: 'Nhận lãi' },
+  pay:      { icon: '💸', label: 'Trả lãi' },
+};
+
+function timelineDateLabel(dateStr) {
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((d - today) / 86400000);
+  const rel = diffDays === 0 ? 'Hôm nay'
+    : diffDays > 0 ? `Còn ${diffDays} ngày`
+    : `Quá hạn ${Math.abs(diffDays)} ngày`;
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return {
+    text: `${WEEKDAYS_VI[d.getDay()]}, ${dd}/${mm}/${d.getFullYear()}`,
+    rel,
+    overdue: diffDays < 0,
+    isToday: diffDays === 0,
+    upcoming: diffDays > 0 && diffDays <= maturityWarnDays,
+  };
+}
+
+function renderTimelineView(assets) {
+  const events = [];
+  for (const a of assets) {
+    if (a.maturity_date) events.push({ date: a.maturity_date, kind: 'maturity', a });
+    const pay = nextInterestPaymentDate(a);
+    if (pay) events.push({ date: pay, kind: a.group_id === 'di-vay' ? 'pay' : 'receive', a });
+  }
+  if (!events.length) return '<div class="empty">Không có sự kiện tài chính nào</div>';
+
+  events.sort((x, y) => x.date.localeCompare(y.date));
+  const byDate = new Map();
+  for (const e of events) {
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  }
+
+  return `
+    <div class="timeline">
+      ${[...byDate.entries()].map(([date, evts]) => {
+        const { text, rel, overdue, isToday, upcoming } = timelineDateLabel(date);
+        return `
+          <div class="tl-day${overdue ? ' overdue' : ''}${isToday ? ' today' : ''}${upcoming ? ' upcoming' : ''}">
+            <div class="tl-date">
+              <span class="tl-dot"></span>
+              <span class="tl-date-text">${text}</span>
+              <span class="tl-date-rel">${rel}</span>
+            </div>
+            <div class="tl-events">
+              ${evts.map((e) => renderTimelineEvent(e)).join('')}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function renderTimelineEvent({ kind, a }) {
+  const k = TIMELINE_KINDS[kind];
+  const memberHTML = a.member_id
+    ? `<span class="member-chip" style="background:${escapeHtml(a.member_color)}">${escapeHtml(a.member_name)}</span>`
+    : '';
+  const rate = a.interest_rate != null && a.interest_rate !== '' ? ` · ${escapeHtml(String(a.interest_rate))}%` : '';
+
+  // Event amount: for lãi events, server-computed pnl already equals one cycle
+  // of interest for monthly/quarterly assets (see computeAssetMetrics), signed
+  // negative for đi vay. Maturity events show the asset value (payout / debt).
+  const interestAmt = kind !== 'maturity' && a.pnl ? Math.abs(a.pnl) : null;
+  const amountHTML = interestAmt != null
+    ? `<div class="tl-event-value ${kind === 'pay' ? 'neg' : 'pos'}">
+         ${kind === 'pay' ? '−' : '+'}${fmtVND(interestAmt)}
+         <div class="muted-sm">Giá trị: ${fmtVND(a.value)}</div>
+       </div>`
+    : `<div class="tl-event-value">${fmtVND(a.value)}</div>`;
+
+  return `
+    <div class="tl-event">
+      <span class="tl-event-icon">${k.icon}</span>
+      <div class="tl-event-main">
+        <div class="ar-name-line">${memberHTML}<strong>${escapeHtml(a.name)}</strong></div>
+        <div class="muted-sm">${k.label} · ${escapeHtml(a.group_icon)} ${escapeHtml(a.group_name)}${rate}</div>
+      </div>
+      ${amountHTML}
+    </div>
   `;
 }
 
