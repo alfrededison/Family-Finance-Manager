@@ -133,8 +133,11 @@ export function computeLoanInterest(a) {
 
 // Returns { value, cost, pnl, pnlPct } for an asset row.
 // - Bank / tiền gửi & cho vay / đi vay: forward-looking interest per pickInterestYears().
-//   For loans pnl = +interest (cho-vay) or −interest (đi-vay). cost equals value so the
-//   dashboard's value-cost rollup isn't polluted by remaining-balance changes.
+//   For loans pnl = +interest (cho-vay) or −interest (đi-vay).
+//   End-of-term loans accrue interest into the balance like a deposit (cost stays
+//   at the principal, value = principal + interest). Periodic-payout cycles keep
+//   value at the remaining balance, so cost equals value and the dashboard's
+//   value-cost rollup isn't polluted by remaining-balance changes.
 // - Everything else: qty × price diff.
 export function computeAssetMetrics(a) {
   if (a.group_id === 'bank' || a.group_id === 'tien-gui') {
@@ -146,12 +149,15 @@ export function computeAssetMetrics(a) {
     return { value, cost, pnl, pnlPct };
   }
   if (a.group_id === 'cho-vay' || a.group_id === 'di-vay') {
-    const value = (a.qty || 0) * (a.current_price || 0);
+    const remaining = (a.qty || 0) * (a.current_price || 0);
     const interest = computeLoanInterest(a);
     const pnl = interest == null ? null : (a.group_id === 'di-vay' ? -interest : interest);
-    const remaining = a.current_price || 0;
     const pnlPct = pnl != null && remaining > 0 ? (pnl / remaining) * 100 : null;
-    return { value, cost: value, pnl, pnlPct };
+    const endOfTerm = !a.interest_payment_cycle || a.interest_payment_cycle === 'end_of_term';
+    if (endOfTerm && interest != null) {
+      return { value: remaining + interest, cost: remaining, pnl, pnlPct };
+    }
+    return { value: remaining, cost: remaining, pnl, pnlPct };
   }
   const value = (a.qty || 0) * (a.current_price || 0);
   const cost = (a.qty || 0) * (a.cost_price || 0);
