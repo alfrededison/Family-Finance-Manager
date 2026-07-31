@@ -43,18 +43,41 @@ function parsePrice(str) {
 
 // ── Provider fetch functions ────────────────────────────────────────────────
 
+// The banggia.doji.vn price table is returned AES-256-CBC encrypted (base64),
+// with the 16-byte IV prepended to the ciphertext. Key is baked into the site's
+// JS bundle. Values are full VND (no ×1000 scaling like the old XML feed).
+const DOJI_AES_KEY_HEX = '7a4b8c3d1e9f2a5b6c0d4e8f3a7b1c5d9e2f6a0b4c8d3e7f1a5b9c2d6e0f4a8b';
+
+async function decryptDojiPayload(b64) {
+  const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const iv = raw.slice(0, 16);
+  const ct = raw.slice(16);
+  const keyBytes = Uint8Array.from(
+    DOJI_AES_KEY_HEX.match(/../g).map((h) => parseInt(h, 16)),
+  );
+  const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-CBC', false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
 async function fetchDoji() {
   // Official DOJI feed (SJC 1L price is uniform nationwide).
-  const res = await fetch('https://update.giavang.doji.vn/banggia/doji_92409/getmt', {
+  const res = await fetch('https://banggia.doji.vn/api/TablePrice/GetTablePrice', {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} from DOJI`);
-  const xml = await res.text();
-  // <Row Name='SJC -Bán Lẻ' Key='doji_0' Sell='14,600' Buy='14,300' /> — Buy is the "mua vào" price.
-  console.log('DOJI XML:', xml);
-  const row = xml.match(/Key='doji_0'[^>]*/)?.[0] || '';
-  const price = parsePrice(row.match(/Buy='([\d.,]+)'/)?.[1]) * 1000;
+  const body = await res.json();
+  if (!body?.data) throw new Error('DOJI: phản hồi không có dữ liệu');
+  const rows = await decryptDojiPayload(body.data);
+  console.log('DOJI prices:', rows);
+  // materialCode '01' = VÀNG MIẾNG SJC; priceDojiBuyIn is the "mua vào" price.
+  const row = rows.find((r) => r.materialCode === '01' && r.type === 'G');
+  let price = Number(row?.priceDojiBuyIn) || 0;
+  // DOJI nhập giá không nhất quán: có lúc là VND đầy đủ (14.550.000),
+  // có lúc là nghìn đồng (13.820). Giá vàng SJC luôn hàng triệu nên
+  // giá trị dưới 1 triệu chắc chắn là đơn vị nghìn → nhân 1000.
+  if (price > 0 && price < 1_000_000) price *= 1000;
   if (!price) throw new Error('DOJI: không lấy được giá');
   return { price };
 }
