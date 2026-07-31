@@ -125,6 +125,8 @@ Routes: `dashboard`, `assets`, `asset-deltas`, `snapshots`, `settings`. Default:
 
 `__GIT_SHA__`, `__GIT_MESSAGE__`, `__GIT_TIMESTAMP__` được inject từ `git log`. Plugin `swCacheVersion` thay `__CACHE_VERSION__` trong `dist/sw.js` bằng SHA sau khi bundle.
 
+Plugin `devEnvFlag` (`apply: 'serve'`) gắn `data-env="dev"` vào `<html>` chỉ khi chạy dev server; `style.css` override `--bg` / `--primary` và thêm nhãn `DEV` cạnh `.brand` để phân biệt với production.
+
 ## Service Worker Update Flow
 
 `main.js` đăng ký SW, lắng nghe `updatefound`. Khi có SW mới → toast "Có phiên bản mới" + nút "Tải lại" → `SKIP_WAITING` message → `controllerchange` → `window.location.reload()`.

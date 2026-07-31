@@ -32,6 +32,18 @@ function swCacheVersion() {
   };
 }
 
+// Gắn data-env="dev" vào <html> khi chạy dev server (apply: 'serve' nên bản
+// build production không bao giờ có attribute này). CSS dựa vào đó để đổi màu.
+function devEnvFlag() {
+  return {
+    name: 'dev-env-flag',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace('<html lang="vi">', '<html lang="vi" data-env="dev">');
+    },
+  };
+}
+
 export default defineConfig({
   define: {
     __GIT_SHA__: JSON.stringify(git.sha),
@@ -40,7 +52,7 @@ export default defineConfig({
   },
   root: 'src',
   publicDir: resolve(__dirname, 'public'),
-  plugins: [swCacheVersion()],
+  plugins: [swCacheVersion(), devEnvFlag()],
   build: {
     outDir: '../dist',
     emptyOutDir: true,

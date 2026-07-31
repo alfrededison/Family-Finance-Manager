@@ -33,6 +33,12 @@ npm run worker:dev           # wrangler on :8787
                              #   POST /notify   → daily push notification
 ```
 
+The dev server renders the app with amber chrome and a `DEV` badge next to the
+brand, so a local tab is never mistaken for production. Vite injects
+`data-env="dev"` on `<html>` (`devEnvFlag` in `vite.config.js`, `apply: 'serve'`)
+and `style.css` overrides `--bg` / `--primary` off that; production builds never
+carry the attribute.
+
 ### Push notification setup (optional)
 
 To enable maturity / interest-payment push notifications, generate a VAPID
