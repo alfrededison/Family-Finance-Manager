@@ -35,7 +35,7 @@ appscript/
 │   ├── style.css                 # All styles + .auth-card / .auth-tabs / body.auth-only gate
 │   ├── pages/
 │   │   ├── dashboard.js
-│   │   ├── assets.js
+│   │   ├── assets.js             # List + form modal; form show "lãi/lỗ dự kiến" live qua computeAssetMetrics()
 │   │   ├── asset-deltas.js
 │   │   ├── snapshots.js          # Weekly asset snapshots view
 │   │   ├── settings.js           # Có "Tài khoản" section (đổi mật khẩu + logout)
@@ -47,7 +47,7 @@ appscript/
 │       ├── banks.js
 │       └── groups.js
 ├── functions/                    # Cloudflare Pages Functions (API)
-│   ├── _utils.js
+│   ├── _utils.js                 # computeAssetMetrics() — frontend cũng import (src/pages/assets.js) để preview lãi/lỗ
 │   ├── _auth.js                  # hashPassword, verifyPassword, createSession, getSessionUser, cookie helpers
 │   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login, signup gated bởi env.ALLOW_SIGNUP)
 │   ├── _snapshot.js              # runSnapshot(env, { userId }) — yêu cầu userId

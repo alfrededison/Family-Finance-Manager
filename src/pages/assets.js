@@ -5,6 +5,7 @@ import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
 import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid, nextInterestPaymentDate } from '../data/groups.js';
 import { shareAsset, shareGroup, SHARE_ICON } from '../share.js';
+import { computeAssetMetrics } from '../../functions/_utils.js';
 
 const MONEY_FIELDS = ['cost_price', 'current_price'];
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
@@ -620,6 +621,7 @@ async function openAssetModal(asset, members, reload) {
       bindBankSelect(formBody);
       bindMoneyInputs(formBody);
       bindFormBehaviour(groupId, formBody);
+      bindPnlPreview(groupId, formBody, editing);
       bindSubmit(groupId, formBody, asset, editing, reload);
     };
 
@@ -1000,8 +1002,112 @@ function bindTermTrio(formBody) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Lãi / lỗ dự kiến — live preview
+// ────────────────────────────────────────────────────────────────────────────
+// Computed with the same computeAssetMetrics() the API uses, so the preview
+// matches what the asset list will show once saved.
+
+const PNL_LABELS = {
+  'bank':     { value: 'Giá trị khi tất toán', cost: 'Tiền gốc',        pnl: 'Lãi dự kiến' },
+  'tien-gui': { value: 'Giá trị khi tất toán', cost: 'Tiền gốc',        pnl: 'Lãi dự kiến' },
+  'cho-vay':  { value: 'Tổng thu dự kiến',     cost: 'Dư nợ còn lại',   pnl: 'Lãi dự kiến' },
+  'di-vay':   { value: 'Tổng phải trả',        cost: 'Dư nợ còn lại',   pnl: 'Lãi phải trả' },
+  'default':  { value: 'Giá trị hiện tại',     cost: 'Vốn',             pnl: 'Lãi / lỗ' },
+};
+
+// Which period the interest number covers — mirrors pickInterestYears().
+function interestHorizonNote(a) {
+  const cycle = a.interest_payment_cycle || (a.maturity_date ? 'end_of_term' : 'monthly');
+  let horizon;
+  if (cycle === 'quarterly') horizon = 'Lãi 1 quý';
+  else if (cycle === 'monthly') horizon = 'Lãi 1 tháng';
+  else horizon = a.start_date && a.maturity_date ? 'Lãi toàn kỳ' : 'Lãi 1 tháng';
+  const tax = Number(a.interest_tax_rate) || 0;
+  return tax > 0 ? `${horizon} · đã trừ thuế ${a.interest_tax_rate}%` : horizon;
+}
+
+function bindPnlPreview(groupId, formBody, editing) {
+  const form = formBody.querySelector('#asset-form');
+  const labels = PNL_LABELS[groupId] || PNL_LABELS.default;
+
+  form.querySelector('.modal-actions').insertAdjacentHTML('beforebegin', `
+    <div class="pnl-preview full" hidden>
+      <div class="pnl-preview-stats">
+        <div class="summary-item">
+          <span class="summary-label">${escapeHtml(labels.value)}</span>
+          <span class="summary-value" data-pp="value">—</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">${escapeHtml(labels.cost)}</span>
+          <span class="summary-value" data-pp="cost">—</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">${escapeHtml(labels.pnl)}</span>
+          <span class="summary-value" data-pp="pnl">—</span>
+        </div>
+      </div>
+      <div class="muted-sm" data-pp="note"></div>
+    </div>
+  `);
+
+  const box = form.querySelector('.pnl-preview');
+  const cell = (k) => box.querySelector(`[data-pp="${k}"]`);
+  const isInterestGroup = ['bank', 'tien-gui', 'cho-vay', 'di-vay'].includes(groupId);
+
+  const update = () => {
+    const a = collectFormPayload(groupId, form);
+    // POST /assets falls back to cost_price when current_price is empty.
+    if (!editing && !a.current_price) a.current_price = a.cost_price;
+    const { value, cost, pnl, pnlPct } = computeAssetMetrics({
+      ...a,
+      qty: Number(a.qty) || 0,
+      interest_rate: a.interest_rate == null ? null : Number(a.interest_rate),
+      interest_tax_rate: a.interest_tax_rate == null ? null : Number(a.interest_tax_rate),
+    });
+
+    box.hidden = !value && !cost;
+    cell('value').textContent = fmtVND(value);
+    cell('cost').textContent = fmtVND(cost);
+    cell('pnl').textContent = pnl == null ? '—' : `${fmtVND(pnl)} (${fmtPct(pnlPct)})`;
+    cell('pnl').className = 'summary-value' + (pnl == null ? '' : (pnl >= 0 ? ' pos' : ' neg'));
+    cell('note').textContent = isInterestGroup && pnl ? interestHorizonNote(a) : '';
+  };
+
+  form.addEventListener('input', update);
+  form.addEventListener('change', update);
+  update();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Submit handler
 // ────────────────────────────────────────────────────────────────────────────
+
+// Form fields → API payload. Shared by submit and the lãi/lỗ preview so both
+// see the exact same asset shape.
+function collectFormPayload(groupId, form) {
+  const fd = new FormData(form);
+  const body = { group_id: groupId };
+  for (const [k, v] of fd.entries()) body[k] = v === '' ? null : v;
+  parseMoneyPayload(body, MONEY_FIELDS);
+
+  // Unchecked checkboxes are absent from FormData — send explicit 0/1.
+  if (form.querySelector('[name="interest_include_maturity"]')) {
+    body.interest_include_maturity = fd.has('interest_include_maturity') ? 1 : 0;
+  }
+
+  if (groupId === 'tien-gui') {
+    body.current_price = body.cost_price;
+  }
+  if (groupId === 'bank' && body.subtype !== BANK_SAVINGS_SUBTYPE) {
+    body.maturity_date = null;
+    body.term = null;
+    body.interest_payment_cycle = null;
+    body.interest_payment_day = null;
+    body.interest_include_maturity = 0;
+  }
+  return body;
+}
+
 function bindSubmit(groupId, formBody, asset, editing, reload) {
   const form = formBody.querySelector('#asset-form');
   const cancelBtn = formBody.querySelector('#cancel');
@@ -1012,26 +1118,7 @@ function bindSubmit(groupId, formBody, asset, editing, reload) {
     const submitBtn = form.querySelector('[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.classList.add('btn-loading');
-    const fd = new FormData(form);
-    const body = { group_id: groupId };
-    for (const [k, v] of fd.entries()) body[k] = v === '' ? null : v;
-    parseMoneyPayload(body, MONEY_FIELDS);
-
-    // Unchecked checkboxes are absent from FormData — send explicit 0/1.
-    if (form.querySelector('[name="interest_include_maturity"]')) {
-      body.interest_include_maturity = fd.has('interest_include_maturity') ? 1 : 0;
-    }
-
-    if (groupId === 'tien-gui') {
-      body.current_price = body.cost_price;
-    }
-    if (groupId === 'bank' && body.subtype !== BANK_SAVINGS_SUBTYPE) {
-      body.maturity_date = null;
-      body.term = null;
-      body.interest_payment_cycle = null;
-      body.interest_payment_day = null;
-      body.interest_include_maturity = 0;
-    }
+    const body = collectFormPayload(groupId, form);
 
     try {
       if (editing) await api.put('/assets/' + asset.id, body);
