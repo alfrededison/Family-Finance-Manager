@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { fmtVND, escapeHtml } from '../main.js';
+import { fmtVND, escapeHtml, openModal, closeModal, toast } from '../main.js';
 import { enrichAsset } from '../data/groups.js';
 
 const PAGE_SIZE = 50;
@@ -51,6 +51,7 @@ export async function renderAssetDeltas(view) {
     document.getElementById('ph-list').innerHTML = '<div class="loading">Đang tải...</div>';
     const { rows, total } = await api.get('/asset-deltas?' + params.toString());
     document.getElementById('ph-list').innerHTML = renderTable(rows);
+    bindUndoButtons(rows, load);
     renderPagination(total);
   };
 
@@ -219,6 +220,103 @@ function fmtChanges(r) {
   }).join('');
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Undo
+// ────────────────────────────────────────────────────────────────────────────
+
+// Why an undo can't run right now, or null when it can.
+function undoBlockedReason(r) {
+  if (r.type === 'create' && r.asset_status === 'deleted') return 'Tài sản đã bị xoá';
+  if (r.type === 'delete' && r.asset_status !== 'deleted') return 'Tài sản đang hoạt động';
+  return null;
+}
+
+function undoButton(r) {
+  const blocked = undoBlockedReason(r);
+  return `<button class="small warn" data-act="undo" data-id="${r.id}"
+    ${blocked ? `disabled title="${escapeHtml(blocked)}"` : 'title="Hoàn tác thay đổi này"'}>↩ Hoàn tác</button>`;
+}
+
+const UNDO_COPY = {
+  create: {
+    title: 'Hoàn tác tạo mới',
+    confirm: 'Xoá tài sản',
+    danger: true,
+    body: (r) => `<p>Tài sản "<strong>${escapeHtml(r.asset_name)}</strong>" sẽ bị xoá.</p>`,
+  },
+  edit: {
+    title: 'Hoàn tác cập nhật',
+    confirm: 'Khôi phục',
+    danger: false,
+    body: (r) => `
+      <p>Khôi phục "<strong>${escapeHtml(r.asset_name)}</strong>" về trạng thái trước thay đổi này:</p>
+      <div class="muted-sm" style="margin-bottom:8px;">${revertPreview(r)}</div>`,
+  },
+  delete: {
+    title: 'Hoàn tác xoá',
+    confirm: 'Tạo lại',
+    danger: false,
+    body: (r) => `<p>Tài sản "<strong>${escapeHtml(r.asset_name)}</strong>" sẽ được tạo lại với thuộc tính tại thời điểm xoá.</p>`,
+  },
+};
+
+// "Nhãn: giá trị hiện tại → giá trị sẽ khôi phục" for each field of an edit delta.
+function revertPreview(r) {
+  let list;
+  try { list = JSON.parse(r.changes || '[]'); } catch { return ''; }
+  if (!Array.isArray(list) || !list.length) return '';
+  return list.map((c) => {
+    const label = FIELD_LABELS[c.field] || c.field;
+    return `<div><strong>${escapeHtml(label)}</strong>: ${fmtVal(c.field, c.new)} → ${fmtVal(c.field, c.old)}</div>`;
+  }).join('');
+}
+
+function openUndoModal(r, reload) {
+  const copy = UNDO_COPY[r.type];
+  if (!copy) return;
+
+  openModal(`
+    <h3>${copy.title}</h3>
+    ${copy.body(r)}
+    <div class="form-grid">
+      <label class="full">Ghi chú
+        <textarea id="undo-notes" rows="2" placeholder="Lý do hoàn tác..."></textarea>
+      </label>
+    </div>
+    <div class="modal-actions full">
+      <button type="button" class="secondary" id="undo-cancel">Huỷ</button>
+      <button type="button" class="${copy.danger ? 'danger' : ''}" id="undo-confirm">${copy.confirm}</button>
+    </div>
+  `, (root) => {
+    root.querySelector('#undo-cancel').onclick = closeModal;
+    root.querySelector('#undo-confirm').onclick = async () => {
+      const btn = root.querySelector('#undo-confirm');
+      btn.disabled = true;
+      btn.classList.add('btn-loading');
+      const notes = root.querySelector('#undo-notes').value.trim() || null;
+      try {
+        await api.post(`/asset-deltas/${r.id}/undo`, notes ? { notes } : {});
+        toast('Đã hoàn tác');
+        closeModal();
+        await reload();
+      } catch (err) {
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        toast('Lỗi: ' + err.message);
+      }
+    };
+  });
+}
+
+function bindUndoButtons(rows, reload) {
+  document.querySelectorAll('#ph-list [data-act="undo"]').forEach((btn) => {
+    const row = rows.find((r) => r.id === Number(btn.dataset.id));
+    if (row) btn.onclick = () => openUndoModal(row, reload);
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function renderTable(rows) {
   if (!rows.length) return '<div class="empty">Chưa có dữ liệu lịch sử nào</div>';
   return `
@@ -231,6 +329,7 @@ function renderTable(rows) {
           <th>Nguồn</th>
           <th>Ghi chú</th>
           <th>Thời gian</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -242,6 +341,7 @@ function renderTable(rows) {
             <td>${fmtSource(r.source)}</td>
             <td class="muted-sm">${escapeHtml(r.note || '')}</td>
             <td class="muted-sm">${fmtDatetime(r.recorded_at)}</td>
+            <td>${undoButton(r)}</td>
           </tr>
         `).join('')}
       </tbody>

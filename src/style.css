@@ -424,7 +424,20 @@ th {
 tr:hover { background: var(--surface-2); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
-#ph-list .table-wrap { width: auto; }
+/* Bỏ padding/bleed bên phải để cột sticky dưới đây dính sát mép, không hở
+   khe cho nội dung cuộn lộ ra. */
+#ph-list .table-wrap { width: auto; margin-right: 0; padding-right: 0; }
+
+/* Cột hoàn tác dính bên phải — bảng lịch sử rộng hơn khung, khỏi phải cuộn ngang để bấm. */
+#ph-list table th:last-child,
+#ph-list table td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+#ph-list table th:last-child { background: var(--surface-2); }
+#ph-list table tr:hover td:last-child { background: var(--surface-2); }
 
 .pos { color: var(--success); }
 .neg { color: var(--danger); }
@@ -485,6 +498,17 @@ button.secondary {
   border: 1px solid var(--border);
 }
 button.danger { background: var(--danger); }
+/* Hổ phách + chữ tối: phân biệt rõ với primary (xanh) và danger (đỏ). */
+button.warn { background: var(--warning); color: #422006; font-weight: 600; }
+button.warn.btn-loading::after { border-color: rgba(0,0,0,0.45); border-top-color: transparent; }
+/* Không dùng được → xám hẳn, thay vì hổ phách mờ (dễ nhầm là bấm được). */
+button.warn:disabled, button.warn:disabled:hover {
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  opacity: 1;
+}
 button.small { padding: 4px 10px; font-size: 12px; min-height: 28px; }
 button.icon-btn {
   display: inline-flex;

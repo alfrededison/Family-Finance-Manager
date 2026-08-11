@@ -66,6 +66,7 @@ appscript/
 │       │   └── test.js           # POST — gửi thử notification cho current user
 │       ├── user-settings.js      # GET/POST per-user K/V (integrations + notify prefs sống ở đây)
 │       ├── asset-deltas.js       # GET — lịch sử thay đổi tài sản (changes JSON), filter asset/type + phân trang
+│       ├── asset-deltas/[id]/undo.js  # POST — hoàn tác 1 bản ghi lịch sử (create→xoá, edit→revert, delete→tạo lại)
 │       ├── assets.js
 │       ├── assets/[id].js
 │       ├── members.js
@@ -155,6 +156,16 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 ## Asset Snapshots
 
 Bảng `asset_snapshots` lưu tổng giá trị theo `(user_id, snapshot_date, group_id, subtype)` — UNIQUE bucket per user. Cron worker chạy weekly (Chủ nhật 17:00 UTC): `fetchAllProviders(env)` (gọi 1 lần, update tất cả users' assets trong bulk SQL) → loop users `runSnapshot(env, { userId })`. Có thể trigger thủ công per-user qua `POST /api/snapshots/run` hoặc trigger global qua `POST http://localhost:8787/` khi chạy `worker:dev`.
+
+## Asset History Undo
+
+Mỗi dòng trong 📋 Lịch sử tài sản có nút **↩ Hoàn tác** → `POST /api/asset-deltas/:id/undo` (body `{notes}` optional). Hành vi theo `type` của bản ghi:
+
+- `create` → soft delete tài sản (`status='deleted'`), giống hành động xoá tài sản.
+- `edit` → set lại các field trong `changes` về giá trị `old` (có confirmation, modal preview `hiện tại → sẽ khôi phục`).
+- `delete` → `status='active'` + apply snapshot đã lưu lúc xoá (thuộc tính tại thời điểm xoá).
+
+Mọi undo đều ghi một delta mới với note `Hoàn tác <loại> (#<id>) — <ghi chú người dùng>`, source `manual`. Field names chỉ được apply nếu nằm trong whitelist `DELTA_FIELDS`. Server trả 409 nếu state không hợp lệ (undo `create` khi tài sản đã xoá, undo `delete` khi tài sản đang hoạt động); UI disable nút sẵn cho 2 case này dựa trên `asset_status` trả về từ `GET /api/asset-deltas`.
 
 ## Push Notifications
 

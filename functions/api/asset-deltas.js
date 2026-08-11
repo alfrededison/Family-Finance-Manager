@@ -24,7 +24,7 @@ export async function onRequestGet({ env, request, data }) {
     const [dataRes, countRes] = await Promise.all([
       env.DB.prepare(`
         SELECT ad.id, ad.asset_id, ad.type, ad.changes, ad.recorded_at, ad.source, ad.note,
-               a.name AS asset_name, a.group_id AS asset_group
+               a.name AS asset_name, a.group_id AS asset_group, a.status AS asset_status
         FROM asset_deltas ad
         JOIN assets a ON a.id = ad.asset_id
         ${whereSQL}
