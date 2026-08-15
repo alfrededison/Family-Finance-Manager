@@ -596,6 +596,16 @@ function jwtExpiry(token) {
   return payload?.exp ? new Date(payload.exp * 1000) : null;
 }
 
+function setCardSyncTime(card, iso) {
+  const el = card?.querySelector('.instance-sync-time');
+  if (el) el.textContent = fmtSyncTime(iso);
+}
+
+function fmtSyncTime(iso) {
+  if (!iso) return 'Chưa đồng bộ';
+  return new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 function renderInstanceCard(serviceId, def, inst, members) {
   const member = members.find((m) => m.id === inst.member_id);
   const memberChip = member
@@ -616,7 +626,9 @@ function renderInstanceCard(serviceId, def, inst, members) {
     }
   }
 
-  const metaRows = [];
+  const metaRows = [
+    `<span>Đồng bộ: <span class="instance-sync-time muted-sm">${escapeHtml(fmtSyncTime(inst.last_sync))}</span></span>`,
+  ];
   if (serviceId === 'tcbs') {
     const payload = jwtPayload(inst.token) || {};
     if (inst.custody_code) {
@@ -633,9 +645,7 @@ function renderInstanceCard(serviceId, def, inst, members) {
     }
     if (payload.email) metaRows.push(`<span>Email: <code>${escapeHtml(payload.email)}</code></span>`);
   }
-  const metaLine = metaRows.length
-    ? `<div class="instance-meta">${metaRows.join('')}</div>`
-    : '';
+  const metaLine = `<div class="instance-meta">${metaRows.join('')}</div>`;
 
   const checkboxes = def.assetTypes.map((t) => `
     <label class="check-label">
@@ -727,6 +737,7 @@ function bindInstanceCardActions(container) {
         btn.textContent = '↻ Đang đồng bộ...';
         try {
           const res = await api.post('/sync', { service: serviceId, instance_id: instanceId, asset_types: assetTypes });
+          setCardSyncTime(card, res.synced_at);
           toast(`Đã đồng bộ: +${res.added} mới · ~${res.updated} cập nhật · -${res.removed} đóng`);
         } catch (err) {
           toast('Lỗi: ' + err.message);
@@ -904,6 +915,7 @@ function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
           asset_types: assetTypes,
           raw_data: parsedRaw,
         });
+        setCardSyncTime(card, res.synced_at);
         toast(`Đã import: +${res.added} mới · ~${res.updated} cập nhật · -${res.removed} đóng`);
         closeModal();
       } catch (err) {

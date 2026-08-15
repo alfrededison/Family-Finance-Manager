@@ -76,7 +76,7 @@ appscript/
 │       ├── dashboard.js
 │       ├── export.js             # Per-user dump (members, assets, asset_deltas, asset_snapshots, user_settings) + global platforms
 │       ├── import.js             # Replace wipe per-user, inject user_id vào mọi row
-│       ├── sync.js               # TCBS/Topi sync — đọc instances từ user_settings
+│       ├── sync.js               # TCBS/Topi sync — đọc instances từ user_settings, ghi lại `last_sync` mỗi instance sau khi sync xong
 │       ├── snapshots.js          # List/query snapshots (per-user)
 │       ├── snapshots/run.js      # Manual snapshot trigger (POST, per-user)
 │       └── market-data/fetch.js  # UI fetch (scoped tới caller); cron không dùng route này

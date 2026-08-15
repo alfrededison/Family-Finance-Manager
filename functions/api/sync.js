@@ -51,7 +51,14 @@ export async function onRequestPost({ env, request, data }) {
       totalRemoved += r.removed;
     }
 
-    return json({ added: totalAdded, updated: totalUpdated, removed: totalRemoved });
+    // Stamp the instance with its sync time (mirrors market.cache.* fetched_at).
+    const syncedAt = nowISO();
+    instance.last_sync = syncedAt;
+    await env.DB.prepare(
+      'INSERT OR REPLACE INTO user_settings (user_id, key, value) VALUES (?, ?, ?)',
+    ).bind(userId, `integration.${service}.instances`, JSON.stringify(instances)).run();
+
+    return json({ added: totalAdded, updated: totalUpdated, removed: totalRemoved, synced_at: syncedAt });
   } catch (err) {
     return error(err.message, 500);
   }
