@@ -1,4 +1,5 @@
 import { json, error, readBody, nowISO, diffAssetFields, snapshotAssetFields, recordAssetDelta } from '../_utils.js';
+import { TOPI_PID, normalizeTopiCaptures, findTopiCapture, topiProfileProducts } from './_topi.js';
 
 const TCBS_BASE = 'https://apiext.tcbs.com.vn';
 
@@ -111,40 +112,18 @@ async function syncType(env, userId, service, instance, assetType, rawData) {
 
 // ─── Topi ────────────────────────────────────────────────────────────────────
 
-const TOPI_PID = { 'tien-gui': 6, 'vang': 7 };
-
 async function syncTopi(env, userId, instance, assetType, rawData) {
-  if (!rawData) throw new Error('Topi yêu cầu upload file JSON — không hỗ trợ sync tự động');
-  if (!TOPI_PID[assetType]) throw new Error(`Topi does not support asset type: ${assetType}`);
+  if (!rawData) throw new Error('Topi yêu cầu dán dữ liệu JSON — không hỗ trợ sync tự động');
+  const pid = TOPI_PID[assetType];
+  if (!pid) throw new Error(`Topi does not support asset type: ${assetType}`);
 
-  // Resolve payload — bundle format {captures:[...]} OR legacy raw response (deposit-only).
-  let payload;
-  if (Array.isArray(rawData.captures)) {
-    const pid = TOPI_PID[assetType];
-    const hit = rawData.captures.find((c) => Number(c.product_type_id) === pid);
-    if (!hit) {
-      console.log(`[Topi] no capture for ${assetType} (pid=${pid}) in bundle — skipping`);
-      return { added: 0, updated: 0, removed: 0 };
-    }
-    payload = hit.response;
-  } else {
-    if (assetType !== 'tien-gui') {
-      console.log(`[Topi] legacy raw file does not contain ${assetType} — skipping`);
-      return { added: 0, updated: 0, removed: 0 };
-    }
-    payload = rawData;
+  const capture = findTopiCapture(normalizeTopiCaptures(rawData), pid);
+  if (!capture) {
+    console.log(`[Topi] no capture for ${assetType} (pid=${pid}) — skipping`);
+    return { added: 0, updated: 0, removed: 0 };
   }
 
-  if (payload.code !== 200) throw new Error(payload.message?.trim() || 'Dữ liệu Topi không hợp lệ');
-
-  const products = payload.data?.Data?.ListProduct ?? [];
-  const incoming = [];
-  for (const product of products) {
-    for (const pp of (product.ProfileProducts ?? [])) {
-      if ((pp.TotalValue ?? 0) <= 0) continue;
-      incoming.push({ product, pp });
-    }
-  }
+  const incoming = topiProfileProducts(capture.data);
 
   if (assetType === 'tien-gui') {
     return upsertAssets(env, userId, 'topi', instance, incoming, {

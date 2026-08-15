@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { escapeHtml, toast, rerender, fmtVND, openModal, closeModal, getCurrentUser, logout } from '../main.js';
+import { TOPI_PID, normalizeTopiCaptures, findTopiCapture, topiProfileProducts } from '../../functions/api/_topi.js';
 
 const INTEGRATION_DEFS = {
   tcbs: {
@@ -811,34 +812,47 @@ async function removeInstance(serviceId, instanceId) {
   });
 }
 
+const TOPI_TYPE_LABELS = {
+  'tien-gui': { label: 'Tiền gửi', qtyUnit: '' },
+  vang:       { label: 'Vàng',     qtyUnit: 'chỉ' },
+};
+
+// → { [assetType]: items[] }, with a key present only for the responses we
+// recognised. An empty array is meaningful, not a parse failure: that product
+// type was sold off, so importing should close out its assets.
 function previewTopiBundle(rawData) {
-  const captures = Array.isArray(rawData?.captures)
-    ? rawData.captures
-    : [{ product_type_id: 6, response: rawData }];
-  const byPid = { 6: [], 7: [] };
-  for (const cap of captures) {
-    const pid = Number(cap.product_type_id);
-    if (!byPid[pid]) continue;
-    const payload = cap.response;
-    if (payload?.code !== 200) continue;
-    const products = payload.data?.Data?.ListProduct ?? [];
-    for (const product of products) {
-      for (const pp of (product.ProfileProducts ?? [])) {
-        if ((pp.TotalValue ?? 0) <= 0) continue;
-        byPid[pid].push({
-          name: (pp.ProductName || product.ProductName || '').slice(0, 40),
-          qty: pp.Quantity ?? 1,
-          totalValue: pp.TotalValue ?? 0,
-        });
-      }
-    }
+  const captures = normalizeTopiCaptures(rawData);
+  const found = {};
+  for (const assetType of Object.keys(TOPI_TYPE_LABELS)) {
+    const cap = findTopiCapture(captures, TOPI_PID[assetType]);
+    if (!cap) continue;
+    found[assetType] = topiProfileProducts(cap.data).map(({ product, pp }) => ({
+      name: (pp.ProductName || product.ProductName || '').slice(0, 40),
+      qty: pp.Quantity ?? 1,
+      totalValue: pp.TotalValue ?? 0,
+    }));
   }
-  return { deposit: byPid[6], gold: byPid[7] };
+  return found;
 }
 
-function renderTopiPreview({ deposit, gold }) {
-  const section = (label, items, qtyUnit) => {
-    if (!items.length) return '';
+function renderTopiPreview(found) {
+  const types = Object.keys(found);
+  if (!types.length) {
+    return '<p class="muted-sm" style="margin-top:10px; color:var(--danger);">Không nhận dạng được response — cần <code>GetBalanceProfileProduct</code> kèm <code>ProfileProductPNL</code> để biết đây là Tiền gửi hay Vàng.</p>';
+  }
+
+  return types.map((assetType) => {
+    const { label, qtyUnit } = TOPI_TYPE_LABELS[assetType];
+    const items = found[assetType];
+
+    if (!items.length) {
+      return `
+        <div style="margin-top:10px;">
+          <strong>${label}</strong>
+          <p class="muted-sm" style="margin:4px 0 0; color:var(--danger);">Không còn tài sản — import sẽ đóng toàn bộ ${label} của kết nối này.</p>
+        </div>`;
+    }
+
     const total = items.reduce((s, i) => s + i.totalValue, 0);
     const rows = items.map((i) => `
       <li style="display:flex; justify-content:space-between; gap:8px; padding:4px 0; border-bottom:1px solid var(--border);">
@@ -853,9 +867,7 @@ function renderTopiPreview({ deposit, gold }) {
         </div>
         <ul style="list-style:none; padding:0; margin:4px 0 0;">${rows}</ul>
       </div>`;
-  };
-  const html = section('Tiền gửi', deposit, '') + section('Vàng', gold, 'chỉ');
-  return html || '<p class="muted-sm" style="margin-top:10px;">File không chứa dữ liệu hợp lệ.</p>';
+  }).join('');
 }
 
 function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
@@ -863,12 +875,14 @@ function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
     <h3>Import dữ liệu ${escapeHtml(def.label)}</h3>
     <p>Kết nối: <strong>${escapeHtml(instanceName)}</strong></p>
     <p class="muted-sm">
-      Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt → F12 → Network →
-      tìm request dữ liệu → Copy Response → lưu file .json → upload lên đây.
+      Click bookmarklet 📌 trên <b>${escapeHtml(def.label)}</b> → mở tab Tiền gửi / Vàng →
+      click lại bookmarklet → bấm 📋 để copy → dán vào đây.
+      Hoặc tự bắt request <code>GetBalanceProfileProduct</code> (F12 → Network, proxy như Reqable)
+      rồi dán thân response — nhiều response thì gộp thành mảng <code>[response1, response2]</code>.
     </p>
     <form id="json-import-form" class="form-grid">
-      <label class="full">File JSON
-        <input type="file" name="file" accept="application/json,.json" required />
+      <label class="full">Dữ liệu JSON
+        <textarea name="json" rows="7" placeholder='{"captures":[...]}  hoặc  {"Code":0,"Data":{"ListProduct":[...]}}'></textarea>
       </label>
       <div id="import-preview" class="full" style="grid-column: 1 / -1;"></div>
       <div class="modal-actions full" style="grid-column: 1 / -1;">
@@ -878,31 +892,50 @@ function openImportJsonModal(serviceId, def, instanceId, instanceName, card) {
     </form>
   `, (root) => {
     const form = root.querySelector('#json-import-form');
-    const fileInput = form.file;
     const preview = root.querySelector('#import-preview');
     let parsedRaw = null;
 
     root.querySelector('#cancel').onclick = closeModal;
 
-    fileInput.onchange = async () => {
-      const file = fileInput.files[0];
-      preview.innerHTML = '';
+    const showError = (msg) => {
+      preview.innerHTML = `<p class="muted-sm" style="color:var(--danger); margin-top:10px;">${escapeHtml(msg)}</p>`;
+    };
+
+    // parsedRaw stays null until the payload is a response we recognise, so
+    // Import can't submit something that would close out the wrong assets.
+    const load = (text) => {
       parsedRaw = null;
-      if (!file) return;
+      preview.innerHTML = '';
+      if (!text.trim()) return;
+
+      let raw;
       try {
-        parsedRaw = JSON.parse(await file.text());
+        raw = JSON.parse(text);
       } catch (err) {
-        preview.innerHTML = `<p class="muted-sm" style="color:var(--danger); margin-top:10px;">File JSON không hợp lệ: ${escapeHtml(err.message)}</p>`;
+        showError(`JSON không hợp lệ: ${err.message}`);
         return;
       }
-      if (serviceId === 'topi') {
-        preview.innerHTML = renderTopiPreview(previewTopiBundle(parsedRaw));
+
+      if (serviceId !== 'topi') { parsedRaw = raw; return; }
+
+      let found;
+      try {
+        found = previewTopiBundle(raw);
+      } catch (err) {
+        showError(err.message);
+        return;
       }
+      preview.innerHTML = renderTopiPreview(found);
+      // Gate on "did we recognise a response", not "did it hold anything" — a
+      // recognised-but-empty one is how a sold-off product type gets closed.
+      if (Object.keys(found).length) parsedRaw = raw;
     };
+
+    form.json.oninput = () => load(form.json.value);
 
     form.onsubmit = async (e) => {
       e.preventDefault();
-      if (!parsedRaw) { toast('Chọn file JSON trước'); return; }
+      if (!parsedRaw) { toast('Dán dữ liệu JSON hợp lệ trước'); return; }
       const assetTypes = [...card.querySelectorAll('.asset-type-check:checked')].map((c) => c.value);
       if (!assetTypes.length) { toast('Chọn ít nhất 1 loại tài sản'); return; }
       const submitBtn = e.target.querySelector('[type="submit"]');
@@ -1037,43 +1070,55 @@ Array.prototype.forEach.call(box.querySelectorAll('button[data-v]'),function(b){
 function topiBookmarklet() {
   // Patch fetch + XHR để bắt GetBalanceProfileProduct cho cả tiền gửi (pid 6) và vàng (pid 7).
   // Accumulate captures keyed by product_type_id (đọc từ response.data.Data.ProfileProductPNL.ProductTypeId).
+  // Panel copy (giống bookmarklet TCBS) hiện ngay từ click đầu và tự cập nhật khi bắt được
+  // response — dán thẳng vào ô Import, không qua file.
   const code = `(function(){
 var TARGET='GetBalanceProfileProduct';
+var LABELS={6:'Tiền gửi',7:'Vàng'};
+function nameOf(pid){return LABELS[pid]||('pid '+pid);}
 function pidOf(d){try{return Number(d.data.Data.ProfileProductPNL.ProductTypeId)||0;}catch(e){return 0;}}
-function setToast(msg){
-  var el=document.getElementById('__topiToast');
-  if(!el){
-    el=document.createElement('div');
-    el.id='__topiToast';
-    el.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;background:#10b981;color:#fff;padding:8px 12px;border-radius:6px;font:14px sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-    document.body.appendChild(el);
-  }
-  el.textContent=msg;
-}
-function bundleStatus(){
-  var keys=Object.keys(window.__topiBundle).sort();
-  if(!keys.length)return '';
-  return 'Đã bắt: pid '+keys.join(', pid ')+'. Click bookmark lại để tải file.';
-}
 function onData(d){
   var pid=pidOf(d);if(!pid)return;
   window.__topiBundle[pid]=d;
-  setToast('✅ '+bundleStatus());
-  document.title='[Topi pid '+Object.keys(window.__topiBundle).sort().join('+')+'] '+(window.__topiTitle||'');
+  showPanel();
 }
-function download(){
-  var captures=Object.keys(window.__topiBundle).map(function(pid){return {product_type_id:Number(pid),response:window.__topiBundle[pid]};});
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify({captures:captures})],{type:'application/json'}));
-  a.download='topi-data.json';
-  a.click();
+function copy(v,btn){navigator.clipboard.writeText(v).then(function(){var t=btn.textContent;btn.textContent='✅';setTimeout(function(){btn.textContent=t;},1200);}).catch(function(){prompt('Copy:',v);});}
+// Đếm đúng số mục sẽ được import: bỏ qua TotalValue <= 0 giống topiProfileProducts.
+function countOf(d){
+  var n=0;
+  try{
+    var lp=d.data.Data.ListProduct||[];
+    for(var i=0;i<lp.length;i++){
+      var pp=lp[i].ProfileProducts||[];
+      for(var j=0;j<pp.length;j++){if((pp[j].TotalValue||0)>0)n++;}
+    }
+  }catch(e){}
+  return n;
 }
-if(window.__topiCap){
-  if(Object.keys(window.__topiBundle).length===0){alert('Chưa bắt được dữ liệu. Mở tab Tiền gửi / Vàng trước rồi click lại.');}
-  else{download();}
-  return;
+// Panel tự dựng lại mỗi lần bắt được response — không cần click bookmark lần 2.
+function showPanel(){
+  var pids=Object.keys(window.__topiBundle).sort();
+  var old=document.getElementById('__topiPanel');if(old)old.remove();
+  var box=document.createElement('div');
+  box.id='__topiPanel';
+  box.style.cssText='position:fixed;top:12px;right:12px;z-index:2147483647;background:#fff;color:#111;padding:14px 16px;border-radius:10px;font:13px/1.5 sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.25);width:300px;border:1px solid #e5e7eb';
+  var head='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong style="color:#10b981">Topi — Copy dữ liệu</strong><span id="__topiClose" style="cursor:pointer;color:#9ca3af;font-size:18px;line-height:1">×</span></div>';
+  var json='';
+  if(!pids.length){
+    box.innerHTML=head+'<div style="color:#6b7280;font-size:12px">Đang chờ dữ liệu — mở tab <b>Tiền gửi</b> / <b>Vàng</b> trên Topi.</div>';
+  }else{
+    var total=0;
+    var parts=pids.map(function(pid){var c=countOf(window.__topiBundle[pid]);total+=c;return nameOf(pid)+': '+c;});
+    json=JSON.stringify({captures:pids.map(function(pid){return {product_type_id:Number(pid),response:window.__topiBundle[pid]};})});
+    box.innerHTML=head+'<div style="margin-bottom:10px"><div style="font-weight:600;color:#374151;margin-bottom:3px">'+parts.join(' · ')+'</div><div style="display:flex;gap:6px;align-items:center"><code style="flex:1;min-width:0;background:#f3f4f6;padding:4px 8px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tổng '+total+' mục</code><button id="__topiCopy" style="cursor:pointer;border:none;background:#10b981;color:#fff;padding:4px 10px;border-radius:5px">📋</button></div></div><div style="color:#6b7280;font-size:12px">Dán vào Finance App → nút 📂 Import</div>';
+  }
+  document.body.appendChild(box);
+  box.querySelector('#__topiClose').onclick=function(){box.remove();};
+  var btn=box.querySelector('#__topiCopy');
+  if(btn)btn.onclick=function(){copy(json,btn);};
 }
-window.__topiCap=true;window.__topiBundle={};window.__topiTitle=document.title;
+if(window.__topiCap){showPanel();return;}
+window.__topiCap=true;window.__topiBundle={};
 var _f=window.fetch;
 window.fetch=function(url){
   var p=_f.apply(this,arguments);
@@ -1091,7 +1136,7 @@ XMLHttpRequest.prototype.open=function(m,url){
   }
   return _open.apply(this,arguments);
 };
-setToast('✅ Topi interceptor sẵn sàng — mở từng tab Tiền gửi / Vàng để bắt dữ liệu.');
+showPanel();
 })()`;
   return 'javascript:' + encodeURIComponent(code);
 }
@@ -1102,11 +1147,12 @@ function openBookmarkletModal(serviceId, def) {
 
   const steps = isImport ? [
     `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
-    'Click bookmark — overlay xanh "Interceptor sẵn sàng" xuất hiện',
-    'Mở tab <b>Tiền gửi</b> — overlay cập nhật "Đã bắt: pid 6"',
-    'Mở tab <b>Vàng</b> — overlay cập nhật "Đã bắt: pid 6, pid 7"',
-    'Click lại bookmark → tải file <code>topi-data.json</code> chứa cả 2',
-    'Upload file đó vào Finance App qua nút 📂 Import',
+    'Click bookmark — panel hiện ở góc phải, chờ dữ liệu',
+    'Mở tab <b>Tiền gửi</b> — panel cập nhật "Tiền gửi: N"',
+    'Mở tab <b>Vàng</b> — panel cập nhật thêm "Vàng: N"',
+    'Click 📋 trên panel để copy JSON chứa cả 2',
+    'Dán vào Finance App qua nút 📂 Import',
+    'Hoặc bỏ qua bookmarklet: bắt <code>GetBalanceProfileProduct</code> bằng proxy (Reqable, F12 → Network) rồi dán thẳng response JSON',
   ] : [
     `Mở <b>${escapeHtml(def.label)}</b> trên trình duyệt và đăng nhập`,
     'Click bookmark → panel hiện ở góc phải với <b>TCBS ID</b>, <b>Custody Code</b> và <b>Token</b>',

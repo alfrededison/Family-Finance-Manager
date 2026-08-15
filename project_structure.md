@@ -77,6 +77,7 @@ appscript/
 │       ├── export.js             # Per-user dump (members, assets, asset_deltas, asset_snapshots, user_settings) + global platforms
 │       ├── import.js             # Replace wipe per-user, inject user_id vào mọi row
 │       ├── sync.js               # TCBS/Topi sync — đọc instances từ user_settings, ghi lại `last_sync` mỗi instance sau khi sync xong
+│       ├── _topi.js              # Nhận dạng shape response Topi (bundle bookmarklet / wrapper gateway / response thô từ proxy) — dùng chung với settings.js
 │       ├── snapshots.js          # List/query snapshots (per-user)
 │       ├── snapshots/run.js      # Manual snapshot trigger (POST, per-user)
 │       └── market-data/fetch.js  # UI fetch (scoped tới caller); cron không dùng route này
@@ -141,6 +142,7 @@ Settings page có nút **"↺ Tải phiên bản mới nhất"**: gọi `reg.upd
 3. Nền tảng tiền gửi (CRUD platforms — global)
 4. Giá thị trường (market provider config — global, dùng `/api/settings`)
 5. 🔗 Tích hợp dịch vụ (TCBS/Topi instances — per-user, dùng `/api/user-settings`)
+   - Topi nhập thủ công (chỉ 1 luồng — dán JSON): bookmarklet bắt `GetBalanceProfileProduct` rồi copy qua panel 📋, hoặc tự copy response từ proxy/DevTools
 6. Sao lưu & phục hồi (JSON export/import per-user)
 7. 🔔 Thông báo nhắc nhở (subscribe push, ngưỡng nhắc trước N ngày, gửi thử — per-user)
 8. Ứng dụng (force reload phiên bản mới nhất)
