@@ -605,6 +605,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius);
 }
 .pnl-preview[hidden] { display: none; }
+.pnl-preview .summary-item[hidden] { display: none; }
 .pnl-preview-stats {
   display: flex;
   flex-wrap: wrap;

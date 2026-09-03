@@ -3,6 +3,8 @@
 //
 // Returns { count, title, body, url }. count=0 → caller may skip sending.
 
+import { nextInterestPaymentDate } from './_utils.js';
+
 const SUBTYPE_LABELS = {
   'trai-phieu':      'trái phiếu',
   'cho-vay-nong':    'cho vay nóng',
@@ -14,41 +16,6 @@ const SUBTYPE_LABELS = {
   'tg-linh-hoat':    'tiền gửi linh hoạt',
   'so-tiet-kiem':    'sổ tiết kiệm',
 };
-
-function startOfDay(d) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-// Clamp day-of-month to the actual last day of the given month.
-function dayInMonth(year, month, day) {
-  const last = new Date(year, month + 1, 0).getDate();
-  return new Date(year, month, Math.min(day, last));
-}
-
-// Next interest payment date >= today, anchored at start_date's month.
-// Only recurring cycles ('monthly' / 'quarterly') produce a date — 'end_of_term'
-// pays at maturity and is covered by the maturity branch instead.
-export function nextInterestPaymentDate(asset, now = new Date()) {
-  const day = Number(asset.interest_payment_day);
-  if (!day || day < 1 || day > 31) return null;
-  const cycle = asset.interest_payment_cycle;
-  if (cycle !== 'monthly' && cycle !== 'quarterly') return null;
-  const months = cycle === 'quarterly' ? 3 : 1;
-
-  const anchor = asset.start_date ? new Date(asset.start_date) : now;
-  if (isNaN(anchor.getTime())) return null;
-
-  const today = startOfDay(now);
-  let y = anchor.getFullYear();
-  let m = anchor.getMonth();
-  for (let i = 0; i < 600; i++) {
-    const cand = dayInMonth(y, m, day);
-    if (cand >= today) return cand;
-    m += months;
-    while (m > 11) { m -= 12; y += 1; }
-  }
-  return null;
-}
 
 export async function buildNotificationSummary(env, userId, now = new Date()) {
   // Per-user threshold (days). Default 3.
@@ -87,7 +54,7 @@ export async function buildNotificationSummary(env, userId, now = new Date()) {
   // 3) Loans with periodic interest payment due within window.
   //    end_of_term is excluded — that case is handled by the maturity branch.
   const { results: loans = [] } = await env.DB.prepare(`
-    SELECT id, name, subtype, group_id, start_date,
+    SELECT id, name, subtype, group_id, start_date, maturity_date,
            interest_payment_day, interest_payment_cycle
     FROM assets
     WHERE user_id = ? AND status = 'active'
@@ -100,10 +67,11 @@ export async function buildNotificationSummary(env, userId, now = new Date()) {
   const paySoon     = []; // di-vay (trả lãi)
   const receiveToday = [];
   const payToday     = [];
+  const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   for (const a of loans) {
     const next = nextInterestPaymentDate(a, now);
     if (!next) continue;
-    const daysOut = Math.round((next - startOfDay(now)) / 86400000);
+    const daysOut = Math.round((new Date(next) - todayUTC) / 86400000);
     if (daysOut < 0 || daysOut > days) continue;
     const isReceive = a.group_id === 'cho-vay';
     if (daysOut === 0) (isReceive ? receiveToday : payToday).push(a);

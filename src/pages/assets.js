@@ -5,7 +5,7 @@ import { platformSelectHTML } from '../components/platform-select.js';
 import { formatBank } from '../data/banks.js';
 import { ASSET_GROUPS, findGroup, enrichAsset, isLiquid, nextInterestPaymentDate } from '../data/groups.js';
 import { shareAsset, shareGroup, SHARE_ICON } from '../share.js';
-import { computeAssetMetrics } from '../../functions/_utils.js';
+import { computeAssetMetrics, nextInterestPeriod } from '../../functions/_utils.js';
 
 const MONEY_FIELDS = ['cost_price', 'current_price'];
 const BANK_SAVINGS_SUBTYPE = 'so-tiet-kiem';
@@ -383,8 +383,8 @@ function renderTimelineEvent({ kind, a }) {
     : '';
   const rate = a.interest_rate != null && a.interest_rate !== '' ? ` · ${escapeHtml(String(a.interest_rate))}%` : '';
 
-  // Event amount: for lãi events, server-computed pnl already equals one cycle
-  // of interest for monthly/quarterly assets (see computeAssetMetrics), signed
+  // Event amount: for lãi events, server-computed pnl already equals the next
+  // payout period's interest for monthly/quarterly assets (see computeAssetMetrics), signed
   // negative for đi vay. Maturity events show the asset value (payout / debt).
   const interestAmt = kind !== 'maturity' && a.pnl ? Math.abs(a.pnl) : null;
   const amountHTML = interestAmt != null
@@ -512,10 +512,17 @@ function subInfoLine(a) {
   const datePart = a.maturity_date ? `Đáo hạn: ${escapeHtml(a.maturity_date)}` : '';
   const nextPay = nextInterestPaymentDate(a);
   const nextPart = nextPay ? `Trả lãi tiếp theo: ${escapeHtml(nextPay)}` : '';
+  // pnl column only covers the next payout for monthly/quarterly cycles; the
+  // whole-term figure is what the bank quotes, so surface it here.
+  const termPart = isPeriodicCycle(a) && a.termPnl != null ? `Tổng lãi toàn kỳ: ${fmtVND(a.termPnl)}` : '';
   const chips = [maturityChip(a.maturity_date), interestPaymentChip(a, nextPay)].filter(Boolean).join(' ');
-  const parts = [textPart, datePart, nextPart].filter(Boolean).join(' · ');
+  const parts = [textPart, datePart, nextPart, termPart].filter(Boolean).join(' · ');
   if (!parts && !chips) return '';
   return `<div class="muted-sm">${parts}${parts && chips ? ' ' : ''}${chips}</div>`;
+}
+
+function isPeriodicCycle(a) {
+  return a.interest_payment_cycle === 'monthly' || a.interest_payment_cycle === 'quarterly';
 }
 
 function interestPaymentChip(a, nextPay) {
@@ -1014,12 +1021,22 @@ const PNL_LABELS = {
   'di-vay':   { value: 'Tổng phải trả',        cost: 'Dư nợ còn lại',   pnl: 'Lãi phải trả' },
   'default':  { value: 'Giá trị hiện tại',     cost: 'Vốn',             pnl: 'Lãi / lỗ' },
 };
+// For monthly/quarterly payouts `value` = principal + next payout only, so the
+// end-of-term wording above would mislead.
+const PERIODIC_LABELS = {
+  'bank':     { value: 'Gốc + lãi kỳ tới', pnl: 'Lãi kỳ tới' },
+  'tien-gui': { value: 'Gốc + lãi kỳ tới', pnl: 'Lãi kỳ tới' },
+  'cho-vay':  { value: 'Dư nợ + lãi kỳ tới', pnl: 'Lãi kỳ tới' },
+  'di-vay':   { value: 'Dư nợ + lãi kỳ tới', pnl: 'Lãi phải trả kỳ tới' },
+};
 
 // Which period the interest number covers — mirrors pickInterestYears().
 function interestHorizonNote(a) {
   const cycle = a.interest_payment_cycle || (a.maturity_date ? 'end_of_term' : 'monthly');
   let horizon;
-  if (cycle === 'quarterly') horizon = 'Lãi 1 quý';
+  const period = nextInterestPeriod(a);
+  if (period) horizon = `Lãi kỳ tới: ${period.days} ngày (${period.from} → ${period.to})`;
+  else if (cycle === 'quarterly') horizon = 'Lãi 1 quý';
   else if (cycle === 'monthly') horizon = 'Lãi 1 tháng';
   else horizon = a.start_date && a.maturity_date ? 'Lãi toàn kỳ' : 'Lãi 1 tháng';
   const tax = Number(a.interest_tax_rate) || 0;
@@ -1045,6 +1062,10 @@ function bindPnlPreview(groupId, formBody, editing) {
           <span class="summary-label">${escapeHtml(labels.pnl)}</span>
           <span class="summary-value" data-pp="pnl">—</span>
         </div>
+        <div class="summary-item" data-pp="term-row" hidden>
+          <span class="summary-label">Tổng lãi toàn kỳ</span>
+          <span class="summary-value" data-pp="term">—</span>
+        </div>
       </div>
       <div class="muted-sm" data-pp="note"></div>
     </div>
@@ -1058,18 +1079,27 @@ function bindPnlPreview(groupId, formBody, editing) {
     const a = collectFormPayload(groupId, form);
     // POST /assets falls back to cost_price when current_price is empty.
     if (!editing && !a.current_price) a.current_price = a.cost_price;
-    const { value, cost, pnl, pnlPct } = computeAssetMetrics({
+    const { value, cost, pnl, pnlPct, termPnl } = computeAssetMetrics({
       ...a,
       qty: Number(a.qty) || 0,
       interest_rate: a.interest_rate == null ? null : Number(a.interest_rate),
       interest_tax_rate: a.interest_tax_rate == null ? null : Number(a.interest_tax_rate),
     });
+    const periodic = isPeriodicCycle(a);
+    const l = (periodic && PERIODIC_LABELS[groupId]) || labels;
 
     box.hidden = !value && !cost;
     cell('value').textContent = fmtVND(value);
+    cell('value').previousElementSibling.textContent = l.value;
     cell('cost').textContent = fmtVND(cost);
     cell('pnl').textContent = pnl == null ? '—' : `${fmtVND(pnl)} (${fmtPct(pnlPct)})`;
+    cell('pnl').previousElementSibling.textContent = l.pnl;
     cell('pnl').className = 'summary-value' + (pnl == null ? '' : (pnl >= 0 ? ' pos' : ' neg'));
+    // End-of-term payouts already show the whole term in `pnl`.
+    const showTerm = periodic && termPnl != null;
+    cell('term-row').hidden = !showTerm;
+    cell('term').textContent = showTerm ? fmtVND(termPnl) : '—';
+    cell('term').className = 'summary-value' + (showTerm ? (termPnl >= 0 ? ' pos' : ' neg') : '');
     cell('note').textContent = isInterestGroup && pnl ? interestHorizonNote(a) : '';
   };
 

@@ -151,7 +151,7 @@ force both wrangler instances onto the same local D1 file.
 │   ├── _auth.js            # PBKDF2 hash + session helpers
 │   ├── _middleware.js      # session gate for all /api/* requests
 │   ├── _snapshot.js        # runSnapshot(env, { userId }) — shared with worker
-│   ├── _notify.js          # buildNotificationSummary + nextInterestPaymentDate
+│   ├── _notify.js          # buildNotificationSummary (uses nextInterestPaymentDate from _utils.js)
 │   ├── _push.js            # VAPID JWT + aes128gcm encryption + sender
 │   └── api/
 │       ├── auth/           # signup, login, logout, me, password

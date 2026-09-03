@@ -47,11 +47,11 @@ appscript/
 │       ├── banks.js
 │       └── groups.js
 ├── functions/                    # Cloudflare Pages Functions (API)
-│   ├── _utils.js                 # computeAssetMetrics() — frontend cũng import (src/pages/assets.js) để preview lãi/lỗ
+│   ├── _utils.js                 # computeAssetMetrics() + computeTermInterest() + nextInterestPaymentDate()/nextInterestPeriod() — frontend cũng import (src/pages/assets.js, src/data/groups.js) để preview lãi/lỗ và ngày trả lãi
 │   ├── _auth.js                  # hashPassword, verifyPassword, createSession, getSessionUser, cookie helpers
 │   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login, signup gated bởi env.ALLOW_SIGNUP)
 │   ├── _snapshot.js              # runSnapshot(env, { userId }) — yêu cầu userId
-│   ├── _notify.js                # buildNotificationSummary(env, userId) + nextInterestPaymentDate(asset)
+│   ├── _notify.js                # buildNotificationSummary(env, userId) — dùng nextInterestPaymentDate() từ _utils.js
 │   ├── _push.js                  # VAPID JWT + aes128gcm encryption + sendUserNotification / sendDailyNotificationForUser
 │   └── api/
 │       ├── _providers.js         # fetchAllProviders(env, userId?) — userId optional (UI scoped, cron global)
@@ -175,7 +175,7 @@ Cron daily (`0 1 * * *` = 08:00 Vietnam) loop từng user → `sendDailyNotifica
 
 1. `buildNotificationSummary(env, userId)` đọc ngưỡng `notify.maturity_days_ahead` (per-user, default 3) → query 2 nhóm:
    - Assets có `maturity_date` rơi trong cửa sổ `[today, today+N]`.
-   - Loans (`cho-vay`/`di-vay`) có `interest_payment_day` set, compute `nextInterestPaymentDate()` (anchor `start_date`, walk forward theo cycle `monthly`/`quarterly`), include nếu daysOut ≤ N.
+   - Loans (`cho-vay`/`di-vay`) có `interest_payment_day` set, compute `nextInterestPaymentDate()` (dùng chung từ `_utils.js`: cycle `monthly`/`quarterly`, bỏ qua ngày ≤ `start_date` và sau `maturity_date`), include nếu daysOut ≤ N.
 2. Nếu summary có item → encrypt payload `{title, body, url}` với aes128gcm cho từng row trong `push_subscriptions` của user, POST tới `endpoint` kèm VAPID JWT.
 3. Endpoint trả 404/410 → row tự xoá. 200/201/202 → bump `last_used_at`.
 
