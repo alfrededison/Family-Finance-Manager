@@ -581,6 +581,11 @@ function parseInstances(raw) {
   try { return Array.isArray(raw) ? raw : JSON.parse(raw); } catch { return []; }
 }
 
+// Token dán từ header trình duyệt có thể kèm tiền tố "Bearer "
+function normalizeToken(token) {
+  return token.replace(/^\s*Bearer\s+/i, '').trim();
+}
+
 function jwtPayload(token) {
   if (!token) return null;
   const parts = token.split('.');
@@ -707,7 +712,7 @@ function bindInstanceCardActions(container) {
       };
       card.querySelector('.token-update-form').onsubmit = async (e) => {
         e.preventDefault();
-        const newToken = card.querySelector('.token-input').value.trim();
+        const newToken = normalizeToken(card.querySelector('.token-input').value);
         if (!newToken) return;
         const btn = e.target.querySelector('[type="submit"]');
         btn.disabled = true;
@@ -1006,7 +1011,7 @@ function openInstanceModal(serviceId, existing, members) {
       const newInst = {
         id: inst.id || Date.now().toString(36),
         name: data.name.trim(),
-        ...(def.syncMode !== 'import' && { token: data.token.trim() }),
+        ...(def.syncMode !== 'import' && { token: normalizeToken(data.token) }),
         member_id: data.member_id ? Number(data.member_id) : null,
       };
       for (const f of def.fields) newInst[f.name] = data[f.name]?.trim() || '';
