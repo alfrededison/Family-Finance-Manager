@@ -4,6 +4,7 @@ import { renderAssetDeltas } from './pages/asset-deltas.js';
 import { renderSnapshots } from './pages/snapshots.js';
 import { renderSettings } from './pages/settings.js';
 import { renderLogin } from './pages/login.js';
+import { renderAdmin } from './pages/admin.js';
 
 const routes = {
   dashboard: renderDashboard,
@@ -11,6 +12,7 @@ const routes = {
   'asset-deltas': renderAssetDeltas,
   snapshots: renderSnapshots,
   settings: renderSettings,
+  admin: renderAdmin,
 };
 
 const view = document.getElementById('view');
@@ -20,6 +22,7 @@ export function getCurrentUser() { return currentUser; }
 
 function currentRoute() {
   const hash = window.location.hash.replace(/^#\//, '').split('?')[0];
+  if (hash === 'admin' && !currentUser?.is_admin) return 'dashboard';
   return routes[hash] ? hash : 'dashboard';
 }
 
@@ -117,6 +120,7 @@ function renderUserChip() {
   el.querySelector('.user-name').textContent = currentUser.name;
   el.querySelector('.user-email').textContent = currentUser.email;
   el.querySelector('#btn-logout').onclick = logout;
+  document.getElementById('nav-admin').hidden = !currentUser.is_admin;
 }
 
 export async function logout() {

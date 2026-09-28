@@ -73,9 +73,37 @@ The app is multi-user with self-hosted email/password auth (PBKDF2 + cookie
 sessions stored in D1). Every API route under `/api/*` requires a session
 except `/api/auth/login` and `/api/auth/signup`.
 
-**Signup is closed by default.** To open it temporarily (e.g. to provision your
-first user), set `ALLOW_SIGNUP="true"` in `wrangler.toml` `[vars]` or via
-`wrangler pages secret put ALLOW_SIGNUP`, then remove it once everyone is in.
+**Signup is invite-only.** Accounts are created from single-use links minted
+by a super admin (below). To provision the first user on a fresh database,
+insert it directly (the password is prompted for):
+
+```bash
+npm run user:create -- you@example.com "Your Name"            # local D1
+npm run user:create -- you@example.com "Your Name" --remote   # production D1
+```
+
+### Super admin
+
+Set `SUPER_ADMIN_EMAILS` (comma-separated) in `wrangler.toml` `[vars]` or via
+`wrangler pages secret put SUPER_ADMIN_EMAILS`. Those users get a
+**🛡️ Quản trị** page (`#/admin`, API under `/api/admin/*`) where they can:
+
+- mint single-use signup links (`#/signup?invite=<token>`, valid 7 days);
+  unused links can be revoked
+- list accounts, reset a password, deactivate / reactivate, or delete an
+  account with all its data (all of these sign the user out everywhere)
+
+Create the account (e.g. with `npm run user:create`) before adding its email to
+the list — signup refuses listed emails, so nobody can register an admin
+address that has no account yet.
+Super admin accounts themselves can't be modified from the page. Deactivated
+users can't log in and are skipped by the daily push notification.
+
+Existing databases need this migration (`schema.sql` already includes it):
+
+```bash
+wrangler d1 execute finance-db --remote --command "ALTER TABLE users ADD COLUMN disabled_at TEXT; CREATE TABLE signup_invites (token TEXT PRIMARY KEY, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), expires_at TEXT NOT NULL, used_at TEXT, used_by INTEGER REFERENCES users(id) ON DELETE SET NULL);"
+```
 
 If you ran `npm run db:seed`, log in with:
 
@@ -155,6 +183,7 @@ force both wrangler instances onto the same local D1 file.
 │   ├── _push.js            # VAPID JWT + aes128gcm encryption + sender
 │   └── api/
 │       ├── auth/           # signup, login, logout, me, password
+│       ├── admin/          # super-admin only: users, invites (gated by admin/_middleware.js)
 │       ├── push/           # subscribe (POST/DELETE) + test (POST)
 │       ├── user-settings.js # per-user K/V (integrations + notify prefs live here)
 │       ├── _providers.js   # fetchAllProviders(env, userId?) — UI scoped, cron global

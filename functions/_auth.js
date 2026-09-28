@@ -66,10 +66,25 @@ export async function verifyPassword(password, stored) {
 
 export const DUMMY_PASSWORD_HASH = DUMMY_HASH;
 
+// ─── Super admin ────────────────────────────────────────────────────────────
+// Comma-separated emails in env.SUPER_ADMIN_EMAILS. Env-only so the role can't
+// be granted through the DB or the UI.
+
+export function isSuperAdmin(env, email) {
+  if (!email) return false;
+  const list = String(env.SUPER_ADMIN_EMAILS || '')
+    .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return list.includes(String(email).toLowerCase());
+}
+
+export function randomToken() {
+  return b64urlEncode(crypto.getRandomValues(new Uint8Array(32)));
+}
+
 // ─── Sessions ───────────────────────────────────────────────────────────────
 
 export async function createSession(env, userId, request) {
-  const token = b64urlEncode(crypto.getRandomValues(new Uint8Array(32)));
+  const token = randomToken();
   const now = new Date();
   const exp = new Date(now.getTime() + SESSION_DAYS * 86400000);
   const ua = request?.headers.get('user-agent')?.slice(0, 255) ?? null;
@@ -101,7 +116,7 @@ export async function getSessionUser(request, env) {
     SELECT s.id AS sid, s.expires_at, s.created_at AS s_created,
            u.id, u.email, u.name
     FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.id = ?
+    WHERE s.id = ? AND u.disabled_at IS NULL
   `).bind(token).first();
   if (!row) return null;
 

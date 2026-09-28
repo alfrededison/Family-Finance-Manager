@@ -39,7 +39,8 @@ appscript/
 │   │   ├── asset-deltas.js
 │   │   ├── snapshots.js          # Weekly asset snapshots view
 │   │   ├── settings.js           # Có "Tài khoản" section (đổi mật khẩu + logout)
-│   │   └── login.js              # Tabbed login/signup form
+│   │   ├── admin.js              # Super admin: signup links + account management
+│   │   └── login.js              # Tabbed login/signup form (#/signup?invite=<token> mở sẵn tab đăng ký)
 │   ├── components/
 │   │   ├── bank-select.js
 │   │   └── platform-select.js
@@ -49,14 +50,15 @@ appscript/
 ├── functions/                    # Cloudflare Pages Functions (API)
 │   ├── _utils.js                 # computeAssetMetrics() + computeTermInterest() + nextInterestPaymentDate()/nextInterestPeriod() — frontend cũng import (src/pages/assets.js, src/data/groups.js) để preview lãi/lỗ và ngày trả lãi
 │   ├── _auth.js                  # hashPassword, verifyPassword, createSession, getSessionUser, cookie helpers
-│   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login, signup gated bởi env.ALLOW_SIGNUP)
+│   ├── _middleware.js            # Session gate cho /api/* (skip /api/auth/login + /api/auth/signup)
 │   ├── _snapshot.js              # runSnapshot(env, { userId }) — yêu cầu userId
 │   ├── _notify.js                # buildNotificationSummary(env, userId) — dùng nextInterestPaymentDate() từ _utils.js
 │   ├── _push.js                  # VAPID JWT + aes128gcm encryption + sendUserNotification / sendDailyNotificationForUser
 │   └── api/
 │       ├── _providers.js         # fetchAllProviders(env, userId?) — userId optional (UI scoped, cron global)
 │       ├── auth/
-│       │   ├── signup.js         # POST — env.ALLOW_SIGNUP='true' mới enable
+│       │   ├── signup.js         # POST — chỉ với invite token hợp lệ
+│       ├── admin/                # Chỉ SUPER_ADMIN_EMAILS (admin/_middleware.js): users, users/[id] (PUT disable, DELETE), users/[id]/password, invites, invites/[token]
 │       │   ├── login.js          # POST — verify password (timing-safe), set sid cookie
 │       │   ├── logout.js         # POST — destroy session, clear cookie
 │       │   ├── me.js             # GET — current user (401 nếu chưa login)
@@ -92,6 +94,7 @@ appscript/
 │   └── icon-{192,512,maskable}.png
 ├── scripts/
 │   ├── db.sh                     # migrate / migrate:remote / seed
+│   ├── create-user.js            # npm run user:create — tạo user trực tiếp trong D1 (bootstrap super admin)
 │   ├── gen-demo.js               # Sinh demo.sql từ demo.template.sql (điền ngày tương đối theo ngày chạy)
 │   ├── setup.sh                  # Initial setup
 │   ├── generate-vapid.sh         # Sinh VAPID keypair (ECDH P-256 → base64url) cho Web Push
@@ -99,7 +102,7 @@ appscript/
 ├── schema.sql                    # Full reset schema (users, sessions, user_settings, members, platforms, assets, asset_deltas, settings, asset_snapshots)
 ├── demo.template.sql             # Template seed — placeholder ngày tương đối ({{D+n}}, {{EOM-n}}, {{DOM+n}})
 ├── demo.sql                      # GENERATED bởi scripts/gen-demo.js — demo có 1 user (demo@example.com / demo1234)
-├── wrangler.toml                 # Pages config (DB binding, build output dir, ALLOW_SIGNUP nếu mở signup)
+├── wrangler.toml                 # Pages config (DB binding, build output dir, SUPER_ADMIN_EMAILS)
 ├── vite.config.js                # Dev proxy /api/ → :8788; injects git info + SW cache version
 └── package.json                  # v0.1.0
 ```
@@ -118,7 +121,8 @@ Routes: `dashboard`, `assets`, `asset-deltas`, `snapshots`, `settings`. Default:
 
 ## Auth Flow
 
-- **Signup** chỉ enable khi `env.ALLOW_SIGNUP === 'true'` (default closed). Bật tạm thời trong `wrangler.toml [vars]` để tạo user đầu, sau đó tắt.
+- **Signup** chỉ qua invite token (bảng `signup_invites`, dùng 1 lần, hạn 7 ngày) do super admin tạo ở trang `#/admin`. User đầu tiên tạo bằng `npm run user:create -- <email> <name> [--remote]` (scripts/create-user.js).
+- **Super admin** xác định bằng env `SUPER_ADMIN_EMAILS` (comma-separated). User bị vô hiệu hoá (`users.disabled_at`) không login được, mọi session bị huỷ.
 - **Login** verify password với constant-time compare; cả miss case cũng verify dummy hash để equalize timing. Set cookie `sid=...; HttpOnly; Secure; SameSite=Lax; Max-Age=30d`.
 - **Session sliding refresh** trong `getSessionUser`: bump `expires_at` khi session > 24h tuổi.
 - **Logout** xoá session row + clear cookie + xoá toàn bộ caches của browser (SW + Cache Storage) để dữ liệu user cũ không leak sang user mới.

@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS members;
 DROP TABLE IF EXISTS push_subscriptions;
 DROP TABLE IF EXISTS user_settings;
 DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS signup_invites;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS users;
 
@@ -18,6 +19,7 @@ CREATE TABLE users (
   email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   name          TEXT    NOT NULL,
   password_hash TEXT    NOT NULL,                       -- "v1:<iter>:<saltB64u>:<hashB64u>"
+  disabled_at   TEXT,                                   -- NULL = active; set by super admin
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -32,6 +34,16 @@ CREATE TABLE sessions (
 );
 CREATE INDEX idx_sessions_user    ON sessions(user_id);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
+
+-- Single-use signup links minted by a super admin (see /api/admin/invites).
+CREATE TABLE signup_invites (
+  token      TEXT    PRIMARY KEY,                       -- 32-byte random, base64url
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT    NOT NULL,
+  used_at    TEXT,
+  used_by    INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
 
 CREATE TABLE user_settings (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

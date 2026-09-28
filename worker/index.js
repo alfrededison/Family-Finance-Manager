@@ -23,7 +23,7 @@ async function refreshAndSnapshot(env) {
 }
 
 async function dailyNotifyAllUsers(env) {
-  const { results: users } = await env.DB.prepare('SELECT id FROM users').all();
+  const { results: users } = await env.DB.prepare('SELECT id FROM users WHERE disabled_at IS NULL').all();
   const out = [];
   for (const { id: userId } of (users || [])) {
     try {

@@ -1,15 +1,21 @@
 export function renderLogin(view) {
-  let mode = 'login';
+  // Signup is invite-only: links look like #/signup?invite=<token> (minted on
+  // the admin page). Without one, only the login form is shown.
+  const [route, query] = window.location.hash.replace(/^#\//, '').split('?');
+  const invite = route === 'signup' ? new URLSearchParams(query).get('invite') : null;
+  let mode = invite ? 'signup' : 'login';
 
   function render() {
     const isSignup = mode === 'signup';
     view.innerHTML = `
       <div class="auth-card">
         <h1>💰 Tài chính Gia đình</h1>
-        <div class="auth-tabs">
-          <button type="button" data-tab="login"  class="${isSignup ? '' : 'active'}">Đăng nhập</button>
-          <button type="button" data-tab="signup" class="${isSignup ? 'active' : ''}">Đăng ký</button>
-        </div>
+        ${invite ? `
+          <div class="auth-tabs">
+            <button type="button" data-tab="login"  class="${isSignup ? '' : 'active'}">Đăng nhập</button>
+            <button type="button" data-tab="signup" class="${isSignup ? 'active' : ''}">Đăng ký</button>
+          </div>
+        ` : ''}
         <form id="auth-form" class="form-grid" autocomplete="on">
           ${isSignup ? `
             <label class="full">Tên
@@ -54,7 +60,10 @@ export function renderLogin(view) {
       email: form.email.value.trim().toLowerCase(),
       password: form.password.value,
     };
-    if (mode === 'signup') payload.name = form.name.value.trim();
+    if (mode === 'signup') {
+      payload.name = form.name.value.trim();
+      payload.invite = invite;
+    }
 
     try {
       const res = await fetch('/api/auth/' + mode, {
